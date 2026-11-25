@@ -102,7 +102,7 @@ docker compose up -d
 ### 方案 B：云容器 / Serverless 部署
 
 直接使用公开 GHCR 镜像部署到任意支持容器的云平台：
-- **镜像地址 (Image)**：`ghcr.io/silentely/ciao-cors:latest`（或指定架构标签 `amd64` / `1.3.2-amd64`，以及版本标签 `1.3.2`）
+- **镜像地址 (Image)**：`ghcr.io/silentely/ciao-cors:latest`（多架构）。也可使用 `amd64`（main 分支的 amd64 专用标签）、`sha-<短提交号>` 与 `sha-<短提交号>-amd64` 追踪具体构建；打 Git Tag 后会额外发布 SemVer 版本标签（如 `1.3.2`、`1.3`、`1`，以及对应的 `1.3.2-amd64`）。
 - **端口 (Port)**：`3000`
 - **健康检查 (Health Check)**：`/health`
 - **环境变量 (可选)**：低配容器推荐设置 `RESOURCE_PROFILE=low-memory`
@@ -148,12 +148,75 @@ sudo ./deploy.sh
 | `DROP_HEADERS` | *(未设置)* | 转发上游前额外剥离的请求头（逗号分隔） |
 | `TIMEOUT` | `30000` | 上游请求超时（毫秒） |
 | `REQUIRE_HEADERS` | `true` | 是否要求客户端携带 `Origin` 或 `X-Requested-With` 头部 |
+| `REQUIRE_HEADERS_EXEMPT_DOMAINS` | *(未设置)* | **请求头豁免目标域名**（精确匹配，逗号分隔或 JSON 数组），仅跳过上述 `Origin` / `X-Requested-With` 校验 |
 | `REMOVE_ORIGIN_HEADER` | `false` | 转发上游时是否去除 Origin 头（防目标网站防盗链拦截） |
 | `ENABLE_KEYWORD_BLOCK` | `true` | 是否拦截常见流媒体切片及高频滥用链接（如 `.m3u8`, `.ts` 等） |
 | `ALLOWED_DOMAINS` | *(未设置)* | 允许代理的目标域名白名单（逗号分隔，如 `api.github.com,httpbin.org`） |
 | `BLOCKED_DOMAINS` | *(未设置)* | 禁止代理的目标域名黑名单（逗号分隔） |
 | `ALLOWED_ORIGINS` | *(未设置)* | 允许访问本代理的前端 Origin 域名（支持 `*` 或特定域名） |
+| `ALLOW_CREDENTIALS` | `false` | **CORS 凭证模式**。仅在 `ALLOWED_ORIGINS` 为显式域名列表时生效，用于 `credentials: include` |
 | `TRUSTED_PROXIES` | *(未设置)* | 受信的反向代理 IP/CIDR 列表（用于准确获取客户端真实 IP） |
+
+---
+
+## 🔐 请求头豁免与原生客户端兼容
+
+默认情况下，代理要求请求携带 `Origin` 或 `X-Requested-With`，以拦截纯浏览器场景之外的滥用。浏览器会自动携带 `Origin`，但命令行工具、桌面/移动原生客户端和标准 API SDK 通常不会，可能因此收到 `403`。
+
+通过 `REQUIRE_HEADERS_EXEMPT_DOMAINS` 可只针对指定目标域名跳过这一项校验：
+
+```env
+REQUIRE_HEADERS=true
+REQUIRE_HEADERS_EXEMPT_DOMAINS=api.example.com,translate.example.org
+```
+
+也支持 JSON 数组写法：
+
+```env
+REQUIRE_HEADERS_EXEMPT_DOMAINS=["api.example.com","translate.example.org"]
+```
+
+豁免后，标准 HTTP 客户端即可直接使用代理：
+
+```bash
+# 无 Origin / X-Requested-With，携带上游 Bearer 凭证
+curl -X POST "https://your-proxy-domain.com/api.example.com/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-upstream-token" \
+  -d '{"model":"your-model","messages":[{"role":"user","content":"hello"}]}'
+```
+
+**匹配规则与安全边界：**
+
+- 使用规范化后的目标 URL 主机名做**精确匹配**，大小写、末尾根点（`api.example.com.`）自动归一；不会隐式豁免子域名。
+- 不支持通配符、路径、端口或协议前缀；非法条目会在启动日志中被忽略。国际化域名按 punycode 比较。
+- 豁免仅作用于 `Origin` / `X-Requested-With` 这一项校验。`PROXY_API_KEY`、`API_KEY`、`ALLOWED_DOMAINS`、`BLOCKED_DOMAINS`、`ALLOWED_ORIGINS`、`BLOCKED_IPS`、SSRF/DNS 校验、关键字拦截、限流、并发限制、请求体大小限制与缓存策略全部照常生效。
+- 依靠豁免进入代理的无头部请求，若上游返回重定向，重定向目标必须同样在豁免名单内；否则请求会被拦截，防止借豁免域名跳转到非豁免域名绕过校验。
+- 目标域名白名单（`ALLOWED_DOMAINS`）与请求头豁免名单用途不同：前者限制“能代理谁”，后者只决定“是否需要浏览器特征头部”。
+
+---
+
+## 🍪 CORS 凭证模式
+
+默认情况下代理返回 `Access-Control-Allow-Origin: *`，适用于无需 Cookie 的普通跨域请求。若前端需要 `fetch(url, { credentials: 'include' })`，可显式开启凭证模式：
+
+```env
+ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+ALLOW_CREDENTIALS=true
+```
+
+- 凭证模式仅在 `ALLOWED_ORIGINS` 为**显式域名列表**时生效；未配置或仅为 `*` 时会自动关闭并在启动日志中提示，避免浏览器拒绝的 `*` + `Access-Control-Allow-Credentials: true` 组合。
+- 只有列表内的 Origin 才会收到 `Access-Control-Allow-Origin: <该 Origin>` 与 `Access-Control-Allow-Credentials: true`，不会反射任意来源。
+- `OPTIONS` 预检与实际请求使用同一套策略；凭证模式下 `Access-Control-Expose-Headers` 会改为显式列表。
+- 上游响应自带的 `Access-Control-*` 头不会透传，CORS 策略始终由本代理按当前配置重建。
+- 原生 HTTP 客户端与不使用凭证的浏览器请求不受影响。
+
+---
+
+## 🧭 启动入口说明
+
+- **Docker / Docker Compose / 本地开发**：入口为 `main.ts`（`deno task start` 同样使用它），由它调用 `server.ts` 导出的 `startServer()`。
+- **Deno Deploy 与单文件部署**：继续使用 `server.ts`。它保留默认 `{ fetch }` 导出用于托管运行时，同时保留 `import.meta.main` 自启动逻辑，因此 `deno run --allow-net --allow-env server.ts` 与 `deploy.sh` 的单文件安装/升级方式保持不变。直接运行 `server.ts` 时，Deno 可能打印 `did you mean to run "deno serve"?` 的提示信息；该提示不影响运行，如需无提示启动请改用 `main.ts`。
 
 ---
 

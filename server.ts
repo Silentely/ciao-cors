@@ -48,6 +48,8 @@ export interface Config {
   maxBodySize: number;
   timeout: number;
   requireHeaders: boolean;
+  requireHeadersExemptDomains: string[];
+  allowCredentials: boolean;
   removeOriginHeader: boolean;
   enableKeywordBlock: boolean;
   blockedKeywords: string[];
@@ -152,6 +154,8 @@ export function loadConfig(): Config {
     ),
     timeout: validatePositiveInt(parseInt(Deno.env.get('TIMEOUT') || '30000'), 30000, 'TIMEOUT'),
     requireHeaders: Deno.env.get('REQUIRE_HEADERS') !== 'false',
+    requireHeadersExemptDomains: [],
+    allowCredentials: Deno.env.get('ALLOW_CREDENTIALS') === 'true',
     removeOriginHeader: Deno.env.get('REMOVE_ORIGIN_HEADER') === 'true' ||
       Deno.env.get('DROP_ORIGIN_HEADER') === 'true',
     enableKeywordBlock: Deno.env.get('ENABLE_KEYWORD_BLOCK') !== 'false',
@@ -200,8 +204,133 @@ export function loadConfig(): Config {
   config.blockedKeywords = validateArrayConfig(config.blockedKeywords, 'BLOCKED_KEYWORDS');
   config.dropHeaders = validateArrayConfig(config.dropHeaders, 'DROP_HEADERS').map((h) => h.toLowerCase());
   config.trustedProxies = validateArrayConfig(config.trustedProxies, 'TRUSTED_PROXIES');
+  config.requireHeadersExemptDomains = parseExemptDomains(
+    validateArrayConfig(parseArray(Deno.env.get('REQUIRE_HEADERS_EXEMPT_DOMAINS')), 'REQUIRE_HEADERS_EXEMPT_DOMAINS'),
+  );
+
+  // 凭证模式必须搭配显式允许的 Origin 列表；通配符模式下强制关闭，避免 `*` + credentials 的非法组合
+  if (config.allowCredentials && (config.allowedOrigins.length === 0 || config.allowedOrigins.includes('*'))) {
+    console.warn(
+      '⚠️  ALLOW_CREDENTIALS requires an explicit ALLOWED_ORIGINS list; disabling credentials mode.',
+    );
+    config.allowCredentials = false;
+  }
 
   return config;
+}
+
+// ==================== 目标域名规范化与请求头豁免 ====================
+const HOSTNAME_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * 规范化用于比较的主机名：统一小写、移除末尾根点（FQDN 写法），
+ * IPv6 保持方括号形式，国际化域名交由 URL 解析转为 punycode。
+ * 返回 null 表示无法安全规范化，调用方必须按“不匹配”处理。
+ *
+ * 该函数是目标解析与豁免名单比较的唯一规范化入口，避免不同阶段出现不一致。
+ * 严格的域名字符校验由 normalizeExemptDomainEntry 负责，以免改变既有代理目标行为。
+ */
+export function normalizeHostname(rawHost: string): string | null {
+  if (typeof rawHost !== 'string') return null;
+  const host = rawHost.trim().toLowerCase();
+  if (!host) return null;
+  if (/[\s/\\@*?#%]/.test(host)) return null;
+  if (host.startsWith('.') || host.includes('..')) return null;
+
+  if (host.includes(':')) {
+    // 仅接受方括号包裹的 IPv6 字面量，裸冒号（端口等）视为歧义写法
+    if (!host.startsWith('[') || !host.endsWith(']')) return null;
+    if (parseIPv6(host.slice(1, -1)) === null) return null;
+    try {
+      return new URL(`http://${host}/`).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+  if (host.startsWith('[') || host.endsWith(']')) return null;
+
+  try {
+    const hostname = new URL(`http://${host}/`).hostname.toLowerCase().replace(/\.+$/, '');
+    return hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 将配置项规范化为精确匹配用的主机名。
+ * 拒绝协议前缀、路径、端口、通配符、空标签等无效或容易产生歧义的规则。
+ */
+export function normalizeExemptDomainEntry(raw: string): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return null;
+  if (/[/\\?#'"@*,\s]/.test(value)) return null;
+
+  const hostname = normalizeHostname(value);
+  if (!hostname) return null;
+
+  // ASCII 输入必须保持原样（仅大小写与尾部根点允许变化），拒绝 0x7f.1 等歧义别名
+  // deno-lint-ignore no-control-regex
+  if (/^[\u0000-\u007F]+$/.test(value)) {
+    const expected = value.toLowerCase().replace(/\.+$/, '');
+    if (hostname !== expected) return null;
+  }
+
+  if (hostname.startsWith('[')) return hostname; // 合法 IPv6 字面量
+
+  const labels = hostname.split('.');
+  if (labels.length > 127) return null;
+  if (labels.some((label) => !HOSTNAME_LABEL_PATTERN.test(label))) return null;
+  if (labels.every((label) => /^\d+$/.test(label)) && parseIPv4(hostname) === null) return null;
+
+  return hostname;
+}
+
+/**
+ * 解析 REQUIRE_HEADERS_EXEMPT_DOMAINS：规范化、去重并丢弃非法条目。
+ * 名单只在配置加载或热重载时处理一次，请求路径上不做重复解析。
+ */
+export function parseExemptDomains(entries: string[]): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const hostname = normalizeExemptDomainEntry(entry);
+    if (!hostname) {
+      console.warn(`⚠️  Ignoring invalid REQUIRE_HEADERS_EXEMPT_DOMAINS entry: ${JSON.stringify(entry)}`);
+      continue;
+    }
+    if (!seen.has(hostname)) {
+      seen.add(hostname);
+      normalized.push(hostname);
+    }
+  }
+  return normalized;
+}
+
+/**
+ * 判断目标主机名是否在请求头豁免名单中（精确匹配，不隐式包含子域名）。
+ */
+export function isHeaderExemptDomain(hostname: string, exemptDomains: readonly string[]): boolean {
+  if (exemptDomains.length === 0) return false;
+  const normalized = normalizeHostname(hostname);
+  if (!normalized) return false;
+  return exemptDomains.includes(normalized);
+}
+
+/**
+ * 从代理目标路径中解析规范化后的主机名；无法解析时返回 null（不进入豁免流程）。
+ */
+export function resolveTargetHostname(targetPath: string): string | null {
+  try {
+    const url = new URL(fixUrl(targetPath));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (url.username || url.password) return null;
+    return normalizeHostname(url.hostname);
+  } catch {
+    return null;
+  }
 }
 
 // ==================== 限制与内存管理模块 ====================
@@ -835,7 +964,10 @@ async function validateTargetUrl(rawUrl: string): Promise<{ valid: boolean; reas
     return { valid: false, reason: 'URL contains control characters' };
   }
 
-  const hostname = targetUrl.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+  const hostname = normalizeHostname(targetUrl.hostname);
+  if (!hostname) {
+    return { valid: false, reason: 'Invalid target hostname' };
+  }
 
   // 检查云平台内部元数据及特殊域名
   const restrictedDomains = [
@@ -952,7 +1084,10 @@ async function validateRequest(
     return { valid: false, reason: check.reason };
   }
 
-  const targetDomain = check.targetUrl.hostname.toLowerCase().replace(/\.$/, '');
+  const targetDomain = normalizeHostname(check.targetUrl.hostname);
+  if (!targetDomain) {
+    return { valid: false, reason: 'Invalid target hostname' };
+  }
 
   // 检查域名黑名单
   if (isDomainBlocked(targetDomain, config)) {
@@ -1033,7 +1168,9 @@ export function buildProxyHeaders(originalHeaders: Headers, config?: Config): He
     'keep-alive',
     'proxy-authenticate',
     'proxy-authorization',
+    'proxy-connection',
     'te',
+    'trailer',
     'trailers',
     'transfer-encoding',
     'upgrade',
@@ -1041,11 +1178,28 @@ export function buildProxyHeaders(originalHeaders: Headers, config?: Config): He
     'cf-ray',
     'cf-visitor',
     'cf-ipcountry',
+    'cdn-loop',
+    // 容器网关 / Serverless 基础设施注入的内部路由标记，不属于业务请求头
+    'k-proxy-request',
+    // X-Forwarded-* 与 Forwarded 是反向代理/负载均衡注入的转发元信息，非客户端业务头。
+    // 逐个显式列出而非按前缀过滤，避免误删业务自定义头。
     'x-proxy-key',
     'x-forwarded-for',
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'x-forwarded-port',
     'x-real-ip',
     'forwarded',
   ]);
+
+  // RFC 9110 7.6.1：Connection 中列出的字段同样是逐跳头部，必须一并剥离
+  const connectionHeader = originalHeaders.get('connection');
+  if (connectionHeader) {
+    for (const token of connectionHeader.split(',')) {
+      const name = token.trim().toLowerCase();
+      if (name) dropHeaders.add(name);
+    }
+  }
 
   const shouldRemoveOrigin = config?.removeOriginHeader ||
     originalHeaders.get('x-remove-origin') === 'true' ||
@@ -1159,6 +1313,7 @@ async function performProxy(
   targetUrl: string,
   config: Config,
   body: Uint8Array | undefined,
+  headerCheckBypassed = false,
 ): Promise<Response> {
   const headers = buildProxyHeaders(request.headers, config);
 
@@ -1209,9 +1364,18 @@ async function performProxy(
       throw new Error(`Redirect blocked: ${check.reason}`);
     }
 
-    const domain = check.targetUrl.hostname.toLowerCase().replace(/\.$/, '');
+    const domain = normalizeHostname(check.targetUrl.hostname);
+    if (!domain) {
+      throw new Error('Redirect blocked: Invalid target hostname');
+    }
     if (isDomainBlocked(domain, config) || !isDomainAllowed(domain, config)) {
       throw new Error('Redirect target domain is not allowed');
+    }
+
+    // 无必需请求头的请求若依靠域名豁免进入代理，重定向目标必须同样在豁免名单内，
+    // 防止借豁免域名跳转到非豁免域名从而绕过请求头校验。
+    if (headerCheckBypassed && !isHeaderExemptDomain(domain, config.requireHeadersExemptDomains)) {
+      throw new Error('Redirect blocked: target domain is not exempt from required request headers');
     }
 
     return check.targetUrl.toString();
@@ -1742,20 +1906,23 @@ export class CiaoCorsServer {
       }
 
       // 7. 必需头部验证（如 Origin / X-Requested-With）
-      if (this.config.requireHeaders) {
-        const hasOrigin = request.headers.has('origin');
-        const hasXRequestedWith = request.headers.has('x-requested-with');
-        if (!hasOrigin && !hasXRequestedWith) {
-          return this.createErrorResponse(
-            403,
-            'Missing required request header. Must specify one of: origin, x-requested-with',
-            {
-              usage: 'Add "Origin" or "X-Requested-With" header to your request',
-            },
-            origin || undefined,
-          );
-        }
+      //    目标域名命中 REQUIRE_HEADERS_EXEMPT_DOMAINS 时仅跳过本项校验，其余安全策略照常执行。
+      const hasOrigin = request.headers.has('origin');
+      const hasXRequestedWith = request.headers.has('x-requested-with');
+      const missingRequiredHeaders = !hasOrigin && !hasXRequestedWith;
+      const headerExempt = this.isHeaderCheckExempt(targetPath);
+      if (this.config.requireHeaders && missingRequiredHeaders && !headerExempt) {
+        return this.createErrorResponse(
+          403,
+          'Missing required request header. Must specify one of: origin, x-requested-with',
+          {
+            usage: 'Add "Origin" or "X-Requested-With" header to your request',
+          },
+          origin || undefined,
+        );
       }
+      // 无必需头部而依靠域名豁免进入代理时，重定向仍须落在豁免名单内
+      const headerCheckBypassed = this.config.requireHeaders && missingRequiredHeaders && headerExempt;
 
       // 8. 请求频率限制
       if (!this.rateLimiter.checkLimit(clientIP)) {
@@ -1851,7 +2018,7 @@ export class CiaoCorsServer {
         const bodyBuffer = await processRequestBody(request, this.config.maxBodySize);
 
         // 执行上游代理请求
-        const proxyResponse = await performProxy(request, targetUrl, this.config, bodyBuffer);
+        const proxyResponse = await performProxy(request, targetUrl, this.config, bodyBuffer, headerCheckBypassed);
         const success = proxyResponse.status < 400;
 
         // 缓存准入评估
@@ -2253,13 +2420,19 @@ export class CiaoCorsServer {
   }
 
   /**
-   * 设置单条响应的 CORS 来源头；多来源白名单模式下补充 Vary: Origin
+   * 设置单条响应的 CORS 来源头；多来源白名单模式下补充 Vary: Origin。
+   * 凭证模式仅在 ALLOWED_ORIGINS 显式列出具体 Origin 时生效，禁止 `*` + credentials 组合。
    */
   private applyCorsOrigin(headers: Headers, origin?: string): void {
-    if (this.config.allowedOrigins.length > 0 && !this.config.allowedOrigins.includes('*')) {
+    const hasExplicitAllowlist = this.config.allowedOrigins.length > 0 && !this.config.allowedOrigins.includes('*');
+
+    if (hasExplicitAllowlist) {
       if (!origin || !this.config.allowedOrigins.includes(origin)) return;
 
       headers.set('Access-Control-Allow-Origin', origin);
+      if (this.config.allowCredentials) {
+        headers.set('Access-Control-Allow-Credentials', 'true');
+      }
       const existingVary = headers.get('Vary');
       if (!existingVary) {
         headers.set('Vary', 'Origin');
@@ -2279,13 +2452,12 @@ export class CiaoCorsServer {
     const headers = new Headers();
 
     const skipHeaders = new Set([
-      'access-control-allow-origin',
-      'access-control-allow-methods',
-      'access-control-allow-headers',
-      'access-control-expose-headers',
       'connection',
       'keep-alive',
       'transfer-encoding',
+      'trailer',
+      'proxy-authenticate',
+      'upgrade',
     ]);
 
     if (!this.config.forwardSetCookie) {
@@ -2293,10 +2465,21 @@ export class CiaoCorsServer {
       skipHeaders.add('set-cookie2');
     }
 
+    // RFC 9110 7.6.1：上游在 Connection 中声明的字段同样是逐跳头部，不应转发给客户端
+    const connectionHeader = originalHeaders.get('connection');
+    if (connectionHeader) {
+      for (const token of connectionHeader.split(',')) {
+        const name = token.trim().toLowerCase();
+        if (name) skipHeaders.add(name);
+      }
+    }
+
     for (const [key, value] of originalHeaders.entries()) {
-      if (skipHeaders.has(key.toLowerCase())) continue;
+      const lowerKey = key.toLowerCase();
+      // CORS 策略完全由本代理重建，不继承上游任何 Access-Control-*（含 credentials/max-age）
+      if (lowerKey.startsWith('access-control-') || skipHeaders.has(lowerKey)) continue;
       // Set-Cookie 允许多条，合并会丢失除最后一条之外的 Cookie
-      if (key.toLowerCase() === 'set-cookie') {
+      if (lowerKey === 'set-cookie') {
         headers.append(key, value);
       } else {
         headers.set(key, value);
@@ -2310,7 +2493,13 @@ export class CiaoCorsServer {
       'Access-Control-Allow-Headers',
       'Accept, Authorization, Cache-Control, Content-Type, DNT, If-Modified-Since, Keep-Alive, Origin, User-Agent, X-Requested-With, Token, x-access-token, X-Proxy-Key, Proxy-Authorization',
     );
-    headers.set('Access-Control-Expose-Headers', '*');
+    // 凭证模式下 `*` 不再作为通配符，必须显式列出可暴露的响应头
+    headers.set(
+      'Access-Control-Expose-Headers',
+      headers.get('Access-Control-Allow-Credentials') === 'true'
+        ? 'Accept, Authorization, Cache-Control, Content-Type, DNT, ETag, Last-Modified, Location, Retry-After, Vary'
+        : '*',
+    );
     headers.set('Access-Control-Max-Age', '86400');
 
     return headers;
@@ -2346,6 +2535,18 @@ export class CiaoCorsServer {
    */
   private resolveClientIP(request: Request, remoteAddr?: { hostname: string }): string {
     return resolveClientIP(request, remoteAddr, this.config);
+  }
+
+  /**
+   * 目标域名是否豁免必需请求头校验。
+   * 仅在 REQUIRE_HEADERS 开启且名单非空时生效；解析失败一律视为不豁免。
+   */
+  private isHeaderCheckExempt(targetPath: string): boolean {
+    if (!this.config.requireHeaders || this.config.requireHeadersExemptDomains.length === 0) {
+      return false;
+    }
+    const hostname = resolveTargetHostname(targetPath);
+    return hostname !== null && isHeaderExemptDomain(hostname, this.config.requireHeadersExemptDomains);
   }
 
   // 常量时间字符串比较，防止时序侧信道攻击
@@ -2418,7 +2619,15 @@ export class CiaoCorsServer {
 }
 
 // ==================== 服务启动模块 ====================
-async function main() {
+/**
+ * 主动启动入口（Docker / 本地 `deno task start` 通过 main.ts 调用）。
+ *
+ * server.ts 同时保留 Deno Deploy 需要的默认 `{ fetch }` 导出，Deno CLI 在直接
+ * `deno run server.ts` 时会据此提示改用 `deno serve`。将主动启动逻辑放在独立的
+ * main.ts 中，可以让运行时入口不携带该默认导出，从而消除提示，同时不改变
+ * server.ts 作为单文件部署产物与托管运行时入口的能力。
+ */
+export async function startServer(): Promise<void> {
   const config = loadConfig();
   const server = new CiaoCorsServer();
 
@@ -2435,6 +2644,14 @@ async function main() {
   🔒 API key (admin): ${config.apiKey ? 'configured' : 'not set'}
   🔑 Proxy API key: ${config.proxyApiKey ? 'configured' : 'disabled (open proxy)'}
   🛡️ Header validation: ${config.requireHeaders ? 'enabled' : 'disabled'}
+  🪪 Header-exempt domains: ${
+    !config.requireHeaders
+      ? 'inactive (header validation disabled)'
+      : config.requireHeadersExemptDomains.length === 0
+      ? 'none'
+      : `${config.requireHeadersExemptDomains.length} (${config.requireHeadersExemptDomains.join(', ')})`
+  }
+  🍪 CORS credentials: ${config.allowCredentials ? 'enabled' : 'disabled'}
   ✂️ Remove Origin header: ${config.removeOriginHeader ? 'enabled' : 'disabled'}
   🚫 Keyword blocking: ${config.enableKeywordBlock ? `enabled (${config.blockedKeywords.length} keywords)` : 'disabled'}
   📦 LRU Cache: ${
@@ -2521,5 +2738,5 @@ export default {
 };
 
 if (import.meta.main) {
-  main();
+  startServer();
 }

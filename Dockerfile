@@ -3,8 +3,8 @@ ARG DENO_VERSION=2.1.9
 
 FROM denoland/deno:${DENO_VERSION} AS builder
 WORKDIR /app
-COPY deno.json server.ts ./
-RUN deno check server.ts
+COPY deno.json server.ts main.ts ./
+RUN deno check server.ts main.ts
 
 FROM denoland/deno:${DENO_VERSION}
 
@@ -30,7 +30,7 @@ ENV PORT=3000 \
 
 RUN mkdir -p /deno-dir && chown -R deno:deno /deno-dir /app
 
-COPY --from=builder --chown=deno:deno /app/deno.json /app/server.ts ./
+COPY --from=builder --chown=deno:deno /app/deno.json /app/server.ts /app/main.ts ./
 COPY --chown=deno:deno LICENSE* ./
 
 USER deno
@@ -40,4 +40,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD ["deno", "eval", "const p=Deno.env.get('PORT')||'3000';const r=await fetch('http://127.0.0.1:'+p+'/health');if(!r.ok)Deno.exit(1);"]
 
-ENTRYPOINT ["deno", "run", "--allow-net", "--allow-env", "--allow-read=/app", "--no-prompt", "/app/server.ts"]
+ENTRYPOINT ["deno", "run", "--allow-net", "--allow-env", "--allow-read=/app", "--no-prompt", "/app/main.ts"]

@@ -34,12 +34,12 @@
     "proseWrap": "preserve"
   },
   "tasks": {
-    "start": "deno run --allow-net --allow-env --allow-read server.ts",
-    "dev": "deno run --allow-net --allow-env --allow-read --watch server.ts",
-    "check": "deno check server.ts",
+    "start": "deno run --allow-net --allow-env --allow-read main.ts",
+    "dev": "deno run --allow-net --allow-env --allow-read --watch main.ts",
+    "check": "deno check server.ts main.ts",
     "lint": "deno lint",
-    "fmt": "deno fmt server.ts",
-    "test": "deno test --allow-net --allow-env",
+    "fmt": "deno fmt server.ts main.ts server_test.ts",
+    "test": "deno test --allow-net --allow-env --allow-run=deno",
     "security-check": "bash security-check.sh"
   },
   "exclude": [

@@ -14,6 +14,9 @@ services:
       # - PROXY_API_KEY=${PROXY_API_KEY:-}
       # - API_KEY=${API_KEY:-}
       # - REQUIRE_HEADERS=true
+      # - REQUIRE_HEADERS_EXEMPT_DOMAINS=api.example.com,translate.example.org
+      # - ALLOWED_ORIGINS=https://app.example.com
+      # - ALLOW_CREDENTIALS=true
       # - ENABLE_STATS=true
       # - ENABLE_CACHE=true
       # - MAX_CACHE_BYTES=33554432
