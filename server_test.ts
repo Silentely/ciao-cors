@@ -1965,7 +1965,9 @@ async function spawnServerProcess(
   stop: () => Promise<number>;
 }> {
   const port = 20000 + Math.floor(Math.random() * 20000);
-  const child = new Deno.Command(Deno.execPath(), {
+  // 通过 PATH 调用 deno，而不是 Deno.execPath()：run 权限按命令名匹配 `--allow-run=deno`，
+  // 绝对路径在部分 Deno 版本需要额外授权到该路径，换机器或换安装位置就会 NotCapable。
+  const child = new Deno.Command('deno', {
     args: ['run', '--allow-net', '--allow-env', '--allow-read', '--no-prompt', entrypoint],
     cwd: new URL('.', import.meta.url).pathname,
     env: { ...env, PORT: String(port), HOST: '127.0.0.1' },
