@@ -409,3 +409,63 @@ Deno.test("Configuration hot reload via reloadConfig()", () => {
   Deno.env.delete("RESOURCE_PROFILE");
   server.reloadConfig();
 });
+
+Deno.test("Management API routing: Tolerates trailing slash", async () => {
+  const server = new CiaoCorsServer();
+  const req = new Request("http://localhost:3000/_api/health/");
+  const res = await server.handleRequest(req);
+  assertEquals(res.status, 200);
+  const data = await res.json();
+  assertEquals(data.status, "healthy");
+});
+
+Deno.test("CORS Headers: Merges Vary header with Origin", async () => {
+  Deno.env.set("ALLOWED_ORIGINS", "https://frontend.example.com");
+  const server = new CiaoCorsServer();
+
+  try {
+    const req = new Request("http://localhost:3000/health", {
+      headers: { "Origin": "https://frontend.example.com" }
+    });
+    const res = await server.handleRequest(req);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), "https://frontend.example.com");
+    assertMatch(res.headers.get("Vary") || "", /Origin/i);
+  } finally {
+    Deno.env.delete("ALLOWED_ORIGINS");
+  }
+});
+
+Deno.test("SSRF Protection: Blocks 6to4 private IPv4 embedding", async () => {
+  const server = new CiaoCorsServer();
+  // 2002:7f00:0001:: encodes 127.0.0.1 (0x7f000001)
+  const req = new Request("http://localhost:3000/http://[2002:7f00:0001::]/", {
+    headers: { "Origin": "https://test.client.com" }
+  });
+  const res = await server.handleRequest(req);
+  assertEquals(res.status, 403);
+});
+
+Deno.test("RateLimiter: Intercepts requests exceeding threshold", async () => {
+  Deno.env.set("RATE_LIMIT", "2");
+  Deno.env.set("RATE_LIMIT_WINDOW", "60000");
+  Deno.env.set("REQUIRE_HEADERS", "false");
+  const server = new CiaoCorsServer();
+
+  try {
+    const req1 = new Request("http://localhost:3000/example.com");
+    await server.handleRequest(req1);
+
+    const req2 = new Request("http://localhost:3000/example.com");
+    await server.handleRequest(req2);
+
+    // 第 3 次请求应触发 429
+    const req3 = new Request("http://localhost:3000/example.com");
+    const res3 = await server.handleRequest(req3);
+    assertEquals(res3.status, 429);
+  } finally {
+    Deno.env.delete("RATE_LIMIT");
+    Deno.env.delete("RATE_LIMIT_WINDOW");
+    Deno.env.delete("REQUIRE_HEADERS");
+  }
+});

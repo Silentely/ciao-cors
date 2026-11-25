@@ -1470,6 +1470,9 @@ export class CiaoCorsServer {
 
       // 3. 处理健康检查路径（无外部依赖，不要求鉴权与并发槽）
       if (targetPath === 'health' || targetPath === '_health') {
+        const healthHeaders = this.buildCorsHeaders(new Headers({
+          'Content-Type': 'application/json'
+        }), origin || undefined);
         return new Response(JSON.stringify({
           status: 'healthy',
           ok: true,
@@ -1478,10 +1481,7 @@ export class CiaoCorsServer {
           version: VERSION,
           profile: this.config.resourceProfile
         }), {
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          }
+          headers: healthHeaders
         });
       }
 
@@ -1823,7 +1823,7 @@ export class CiaoCorsServer {
       }
     }
 
-    const apiPath = path.substring(5).split('?')[0]; // 移除 '_api/' 前缀与 query 参数
+    const apiPath = path.substring(5).split('?')[0].replace(/\/+$/, ''); // 移除 '_api/' 前缀与 query 参数及末尾斜杠
 
     switch (apiPath) {
       case 'stats':
@@ -1987,7 +1987,14 @@ export class CiaoCorsServer {
         headers.set('Access-Control-Allow-Origin', '*');
       } else if (origin && this.config.allowedOrigins.includes(origin)) {
         headers.set('Access-Control-Allow-Origin', origin);
-        headers.set('Vary', 'Origin');
+        const existingVary = headers.get('Vary');
+        if (existingVary) {
+          if (!existingVary.toLowerCase().split(',').map(s => s.trim()).includes('origin')) {
+            headers.set('Vary', `${existingVary}, Origin`);
+          }
+        } else {
+          headers.set('Vary', 'Origin');
+        }
       }
     } else {
       headers.set('Access-Control-Allow-Origin', '*');
@@ -2020,7 +2027,14 @@ export class CiaoCorsServer {
         headers.set('Access-Control-Allow-Origin', '*');
       } else if (origin && this.config.allowedOrigins.includes(origin)) {
         headers.set('Access-Control-Allow-Origin', origin);
-        headers.set('Vary', 'Origin');
+        const existingVary = headers.get('Vary');
+        if (existingVary) {
+          if (!existingVary.toLowerCase().split(',').map(s => s.trim()).includes('origin')) {
+            headers.set('Vary', `${existingVary}, Origin`);
+          }
+        } else {
+          headers.set('Vary', 'Origin');
+        }
       }
     } else {
       headers.set('Access-Control-Allow-Origin', '*');
