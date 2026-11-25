@@ -1225,6 +1225,38 @@ Deno.test('Header exemption: cached response cannot bypass redirect re-check', a
   }
 });
 
+Deno.test('Header exemption: header-less requests keep their own cache entries', async () => {
+  const stub = installNetworkStub(() =>
+    new Response('ok', {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=60' },
+    })
+  );
+
+  try {
+    await withServer({
+      REQUIRE_HEADERS: 'true',
+      REQUIRE_HEADERS_EXEMPT_DOMAINS: 'cache-direct.example.net',
+      ENABLE_LOGGING: 'false',
+      ENABLE_CACHE: 'true',
+    }, async (server) => {
+      const target = 'http://localhost:3000/cache-direct.example.net/ok';
+      const first = await server.handleRequest(new Request(target));
+      assertEquals(first.status, 200);
+      assertEquals(await first.text(), 'ok');
+      assertEquals(stub.calls.length, 1);
+
+      // 分区缓存不应退化为禁用缓存：同一无头请求仍可复用自己写入的条目。
+      const second = await server.handleRequest(new Request(target));
+      assertEquals(second.status, 200);
+      assertEquals(await second.text(), 'ok');
+      assertEquals(stub.calls.length, 1, 'header-less exempt request should reuse its own cache entry');
+    });
+  } finally {
+    stub.restore();
+  }
+});
+
 Deno.test('Header exemption: redirect between exempt domains is allowed', async () => {
   const stub = installNetworkStub((url) => {
     if (url.includes('first-exempt.example.net')) {
