@@ -110,6 +110,8 @@
 | `REMOVE_ORIGIN_HEADER` | `false` | 转发请求到目标服务器时是否移除Origin头部（防止目标防盗链拦截） |
 | `ENABLE_KEYWORD_BLOCK` | `true` | 是否启用URL关键字拦截（参考 netnr/workers 防滥用策略） |
 | `BLOCKED_KEYWORDS` | 默认流媒体切片 | URL阻断关键字列表（默认包含 `.m3u8, .ts, .m4s, .mpd, .acc, googlevideo.com, photocall.tv, liveradio.ie`） |
+| `MAX_CACHE_ENTRIES` | `1000` | LRU内存缓存最大容量条目数（防止内存无界增长） |
+| `DROP_HEADERS` | - | 转发代理请求时剥离的自定义请求头列表（JSON或逗号分隔，如 `cookie,referer`） |
 
 ### 配置示例
 
@@ -130,6 +132,8 @@ export REQUIRE_HEADERS=true  # 强制要求Origin或X-Requested-With头部
 export REMOVE_ORIGIN_HEADER=true  # 转发代理请求到目标服务器时移除Origin头部
 export ENABLE_KEYWORD_BLOCK=true  # 启用URL关键字拦截（默认已启用）
 export BLOCKED_KEYWORDS='[".m3u8", ".ts", ".m4s", ".mpd", ".acc", "googlevideo.com", "photocall.tv", "liveradio.ie"]'  # 自定义关键字拦截列表
+export MAX_CACHE_ENTRIES=1000  # LRU缓存容量上限
+export DROP_HEADERS="cookie,referer"  # 自定义剔除的上游请求头
 ```
 
 **性能配置**

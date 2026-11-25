@@ -46,6 +46,8 @@ interface Config {
   removeOriginHeader: boolean;
   enableKeywordBlock: boolean;
   blockedKeywords: string[];
+  maxCacheEntries: number;
+  dropHeaders: string[];
 }
 
 /**
@@ -108,7 +110,9 @@ function loadConfig(): Config {
     blockedKeywords: (() => {
       const raw = Deno.env.get('BLOCKED_KEYWORDS') || Deno.env.get('BLOCK_KEYWORDS');
       return raw !== undefined ? parseArray(raw) : [...DEFAULT_BLOCKED_KEYWORDS];
-    })()
+    })(),
+    maxCacheEntries: validatePositiveInt(parseInt(Deno.env.get('MAX_CACHE_ENTRIES') || '1000'), 1000, 'MAX_CACHE_ENTRIES'),
+    dropHeaders: parseArray(Deno.env.get('DROP_HEADERS'))
   };
 
   // 验证数组配置的有效性
@@ -125,6 +129,7 @@ function loadConfig(): Config {
   config.blockedDomains = validateArrayConfig(config.blockedDomains, 'BLOCKED_DOMAINS');
   config.allowedDomains = validateArrayConfig(config.allowedDomains, 'ALLOWED_DOMAINS');
   config.blockedKeywords = validateArrayConfig(config.blockedKeywords, 'BLOCKED_KEYWORDS');
+  config.dropHeaders = validateArrayConfig(config.dropHeaders, 'DROP_HEADERS');
 
   return config;
 }
@@ -196,50 +201,83 @@ class RateLimiter {
   }
 }
 
+class LRUCache<K, V> {
+  private map = new Map<K, V>();
+  private max: number;
+
+  constructor(max = 1000) {
+    this.max = max;
+  }
+
+  get(key: K): V | undefined {
+    const val = this.map.get(key);
+    if (val !== undefined) {
+      this.map.delete(key);
+      this.map.set(key, val);
+    }
+    return val;
+  }
+
+  set(key: K, val: V): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.max) {
+      const oldestKey = this.map.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.map.delete(oldestKey);
+      }
+    }
+    this.map.set(key, val);
+  }
+
+  delete(key: K): boolean {
+    return this.map.delete(key);
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  entries(): IterableIterator<[K, V]> {
+    return this.map.entries();
+  }
+}
+
 class ConcurrencyLimiter {
   private perIpCount: Map<string, number> = new Map();
   private totalCount = 0;
   private perIpLimit: number;
   private totalLimit: number;
-  private mutex: Promise<void> = Promise.resolve();
 
   constructor(perIpLimit: number, totalLimit: number) {
     this.perIpLimit = perIpLimit;
     this.totalLimit = totalLimit;
   }
 
-  async acquire(ip: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      this.mutex = this.mutex.then(() => {
-        const currentPerIp = this.perIpCount.get(ip) || 0;
-
-        if (currentPerIp >= this.perIpLimit || this.totalCount >= this.totalLimit) {
-          resolve(false);
-          return;
-        }
-
-        this.perIpCount.set(ip, currentPerIp + 1);
-        this.totalCount++;
-        resolve(true);
-      });
-    });
+  acquire(ip: string): boolean {
+    const currentPerIp = this.perIpCount.get(ip) || 0;
+    if (currentPerIp >= this.perIpLimit || this.totalCount >= this.totalLimit) {
+      return false;
+    }
+    this.perIpCount.set(ip, currentPerIp + 1);
+    this.totalCount++;
+    return true;
   }
 
-  async release(ip: string): Promise<void> {
-    return new Promise((resolve) => {
-      this.mutex = this.mutex.then(() => {
-        const currentPerIp = this.perIpCount.get(ip) || 0;
-        if (currentPerIp > 0) {
-          this.perIpCount.set(ip, currentPerIp - 1);
-          this.totalCount = Math.max(0, this.totalCount - 1);
+  release(ip: string): void {
+    const currentPerIp = this.perIpCount.get(ip) || 0;
+    if (currentPerIp > 0) {
+      this.perIpCount.set(ip, currentPerIp - 1);
+      this.totalCount = Math.max(0, this.totalCount - 1);
 
-          if (this.perIpCount.get(ip) === 0) {
-            this.perIpCount.delete(ip);
-          }
-        }
-        resolve();
-      });
-    });
+      if (this.perIpCount.get(ip) === 0) {
+        this.perIpCount.delete(ip);
+      }
+    }
   }
 
   getStats(): { perIpCount: Map<string, number>; totalCount: number } {
@@ -251,31 +289,9 @@ class ConcurrencyLimiter {
 }
 
 /**
- * 校验目标URL自身的安全性：协议白名单、控制字符、内网地址、受限端口等
- * 初始请求和每一跳重定向都会调用，防止通过重定向绕过SSRF防护
+ * 校验 IP 是否属于私有网络或保留地址
  */
-function validateTargetUrl(rawUrl: string): { valid: boolean; reason?: string; targetUrl?: URL } {
-  let targetUrl: URL;
-  try {
-    targetUrl = new URL(fixUrl(rawUrl));
-  } catch {
-    return { valid: false, reason: 'Invalid URL' };
-  }
-
-  // 只允许http/https协议（同时拦截javascript:/data:/file:等危险协议）
-  if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
-    return { valid: false, reason: 'Unsupported URL protocol' };
-  }
-
-  // 检查是否包含控制字符
-  if (/[\u0000-\u001F\u007F-\u009F]/.test(rawUrl)) {
-    return { valid: false, reason: 'URL contains control characters' };
-  }
-
-  // 去掉IPv6地址的方括号，便于匹配私网规则
-  const hostname = targetUrl.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-
-  // 检查私有IP地址范围（IPv4）
+function isPrivateOrReservedIP(ip: string): boolean {
   const privateIPv4Patterns = [
     /^127\./,           // 127.0.0.0/8 (localhost)
     /^10\./,            // 10.0.0.0/8
@@ -286,54 +302,123 @@ function validateTargetUrl(rawUrl: string): { valid: boolean; reason?: string; t
     /^224\./,           // 224.0.0.0/4 (multicast)
     /^240\./,           // 240.0.0.0/4 (reserved)
     /^255\.255\.255\.255$/, // broadcast
-    /^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./  // 100.64.0.0/10 (carrier-grade NAT)
+    /^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./  // 100.64.0.0/10 (CGNAT)
   ];
 
-  // 检查IPv6私有地址
   const privateIPv6Patterns = [
     /^::1$/,            // IPv6 localhost
     /^::/,              // IPv6 unspecified
-    /^fe80:/,           // IPv6 link-local
-    /^fc00:/,           // IPv6 unique local
-    /^fd00:/,           // IPv6 unique local
-    /^ff00:/            // IPv6 multicast
+    /^fe80:/i,          // IPv6 link-local
+    /^fc00:/i,          // IPv6 unique local
+    /^fd00:/i,          // IPv6 unique local
+    /^ff00:/i           // IPv6 multicast
   ];
+
+  const cleanIp = ip.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+  const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(cleanIp);
+  if (isIPv4) {
+    return privateIPv4Patterns.some(pattern => pattern.test(cleanIp));
+  }
+  return privateIPv6Patterns.some(pattern => pattern.test(cleanIp));
+}
+
+/**
+ * 动态解析域名真实 IP 并校验，防范 DNS Rebinding / 内网 SSRF 绕过
+ */
+async function verifyDomainResolution(hostname: string): Promise<{ safe: boolean; reason?: string }> {
+  const cleanHost = hostname.replace(/^\[/, "").replace(/\]$/, "");
+  const isIP = /^(\d{1,3}\.){3}\d{1,3}$/.test(cleanHost) || cleanHost.includes(":");
+  if (isIP) {
+    if (isPrivateOrReservedIP(cleanHost)) {
+      return { safe: false, reason: "Access to private or reserved IP address is forbidden" };
+    }
+    return { safe: true };
+  }
+
+  // 运行在 Deno 环境时，使用 Deno.resolveDns 解析真实 A 和 AAAA 记录
+  if (typeof (globalThis as any).Deno !== "undefined" && typeof (globalThis as any).Deno.resolveDns === "function") {
+    try {
+      const records: string[] = [];
+      try {
+        const aRecords = await (globalThis as any).Deno.resolveDns(hostname, "A");
+        if (Array.isArray(aRecords)) records.push(...aRecords);
+      } catch {
+        // 无 A 记录忽略
+      }
+      try {
+        const aaaaRecords = await (globalThis as any).Deno.resolveDns(hostname, "AAAA");
+        if (Array.isArray(aaaaRecords)) records.push(...aaaaRecords);
+      } catch {
+        // 无 AAAA 记录忽略
+      }
+
+      for (const ip of records) {
+        if (isPrivateOrReservedIP(ip)) {
+          return { safe: false, reason: `Target domain resolves to restricted private IP: ${ip}` };
+        }
+      }
+    } catch {
+      // 容错处理：若 DNS 解析失败放行，由后续底层 fetch 处理
+    }
+  }
+
+  return { safe: true };
+}
+
+/**
+ * 校验目标URL自身的安全性：协议白名单、控制字符、内网地址、受限端口、DNS解析等
+ * 初始请求和每一跳重定向都会调用，防止通过重定向绕过SSRF防护
+ */
+async function validateTargetUrl(rawUrl: string): Promise<{ valid: boolean; reason?: string; targetUrl?: URL }> {
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(fixUrl(rawUrl));
+  } catch {
+    return { valid: false, reason: "Invalid URL" };
+  }
+
+  // 只允许http/https协议（同时拦截javascript:/data:/file:等危险协议）
+  if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+    return { valid: false, reason: "Unsupported URL protocol" };
+  }
+
+  // 检查是否包含控制字符
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(rawUrl)) {
+    return { valid: false, reason: "URL contains control characters" };
+  }
+
+  // 去掉IPv6地址的方括号，便于匹配私网规则
+  const hostname = targetUrl.hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
 
   // 检查特殊域名和元数据服务
   const restrictedDomains = [
-    'localhost',
-    'metadata.google.internal',
-    'metadata.goog',
-    '169.254.169.254',  // AWS/GCP metadata service
-    'metadata',
-    'instance-data',
-    'consul',
-    'vault.service.consul'
+    "localhost",
+    "metadata.google.internal",
+    "metadata.goog",
+    "169.254.169.254",  // AWS/GCP metadata service
+    "metadata",
+    "instance-data",
+    "consul",
+    "vault.service.consul"
   ];
 
-  // 检查是否为IP地址
-  const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-  const isIPv6 = hostname.includes(':') && !hostname.includes('.');
-
-  if (isIPv4 && privateIPv4Patterns.some(pattern => pattern.test(hostname))) {
-    return { valid: false, reason: 'Access to private IPv4 addresses is not allowed' };
+  if (restrictedDomains.some(domain => hostname === domain || hostname.endsWith("." + domain))) {
+    return { valid: false, reason: "Access to restricted domains is not allowed" };
   }
 
-  if (isIPv6 && privateIPv6Patterns.some(pattern => pattern.test(hostname))) {
-    return { valid: false, reason: 'Access to private IPv6 addresses is not allowed' };
+  // 动态 DNS 解析与私网 IP 校验（防 DNS Rebinding / 内网绕过）
+  const dnsCheck = await verifyDomainResolution(hostname);
+  if (!dnsCheck.safe) {
+    return { valid: false, reason: dnsCheck.reason };
   }
 
-  if (restrictedDomains.some(domain => hostname === domain || hostname.endsWith('.' + domain))) {
-    return { valid: false, reason: 'Access to restricted domains is not allowed' };
-  }
-
-  // 检查端口是否为敏感端口
+  // 检查受限端口
   const port = targetUrl.port;
   if (port) {
     const portNum = parseInt(port);
     const restrictedPorts = [22, 23, 25, 53, 135, 139, 445, 993, 995, 1433, 1521, 3306, 3389, 5432, 5984, 6379, 9200, 11211, 27017];
     if (restrictedPorts.includes(portNum)) {
-      return { valid: false, reason: 'Access to restricted ports is not allowed' };
+      return { valid: false, reason: "Access to restricted ports is not allowed" };
     }
   }
 
@@ -343,7 +428,7 @@ function validateTargetUrl(rawUrl: string): { valid: boolean; reason?: string; t
 /**
  * 安全检查：验证目标URL和请求来源
  */
-function validateRequest(url: string, ip: string, config: Config, origin?: string | null): { valid: boolean; reason?: string } {
+async function validateRequest(url: string, ip: string, config: Config, origin?: string | null): Promise<{ valid: boolean; reason?: string }> {
   // 检查IP黑名单
   if (config.blockedIPs.length > 0 && config.blockedIPs.includes(ip)) {
     return { valid: false, reason: 'IP blocked' };
@@ -364,7 +449,7 @@ function validateRequest(url: string, ip: string, config: Config, origin?: strin
   }
 
   // 校验目标URL安全性（协议、控制字符、内网地址、受限端口）
-  const check = validateTargetUrl(url);
+  const check = await validateTargetUrl(url);
   if (!check.valid || !check.targetUrl) {
     return { valid: false, reason: check.reason };
   }
@@ -437,6 +522,13 @@ function buildProxyHeaders(originalHeaders: Headers, config?: Config): Record<st
     dropHeaders.push('origin');
   }
   dropHeaders.push('x-remove-origin', 'x-drop-origin');
+
+  // 用户自定义配置要移除的上游请求头
+  if (config?.dropHeaders && config.dropHeaders.length > 0) {
+    for (const h of config.dropHeaders) {
+      dropHeaders.push(h.toLowerCase().trim());
+    }
+  }
 
   for (const [key, value] of originalHeaders.entries()) {
     const lowerKey = key.toLowerCase();
@@ -567,7 +659,7 @@ async function performProxy(request: Request, targetUrl: string, config: Config)
   };
 
   // 校验重定向目标：禁止跳转到内网地址、危险协议或黑名单域名
-  const validateRedirectTarget = (location: string, baseUrl: string): string => {
+  const validateRedirectTarget = async (location: string, baseUrl: string): Promise<string> => {
     const resolved = new URL(location, baseUrl);
     const resolvedStr = resolved.toString();
 
@@ -580,7 +672,7 @@ async function performProxy(request: Request, targetUrl: string, config: Config)
       }
     }
 
-    const check = validateTargetUrl(resolvedStr);
+    const check = await validateTargetUrl(resolvedStr);
     if (!check.valid || !check.targetUrl) {
       throw new Error(`Redirect blocked: ${check.reason}`);
     }
@@ -996,7 +1088,7 @@ class CiaoCorsServer {
   private statsCollector: StatsCollector;
   private logger: Logger;
   // 添加简单缓存
-  private responseCache: Map<string, { response: Response, timestamp: number }> = new Map();
+  private responseCache: LRUCache<string, { response: Response, timestamp: number }>;
   private cacheTTL = 60000; // 1分钟缓存
   private cacheCleanupTimer: number | null = null;
   private isDestroyed: boolean = false;
@@ -1007,6 +1099,7 @@ class CiaoCorsServer {
     this.concurrencyLimiter = new ConcurrencyLimiter(this.config.concurrentLimit, this.config.totalConcurrentLimit);
     this.statsCollector = new StatsCollector();
     this.logger = new Logger(this.config.enableLogging, this.config.logWebhook);
+    this.responseCache = new LRUCache(this.config.maxCacheEntries);
 
     // 定期清理缓存
     this.cacheCleanupTimer = setInterval(() => {
@@ -1029,11 +1122,16 @@ class CiaoCorsServer {
         return this.handlePreflight(request);
       }
 
-      // 解析目标URL（必须带上查询字符串，否则GET参数会全部丢失）
+      // 解析目标URL（支持两种模式：Query参数 ?url=... 或 路径模式 /{target-url}）
       const url = new URL(request.url);
+      const queryUrl = url.searchParams.get('url');
       let targetPath: string;
       try {
-        targetPath = decodeURIComponent(url.pathname.substring(1)) + url.search;
+        if (queryUrl) {
+          targetPath = queryUrl.trim();
+        } else {
+          targetPath = decodeURIComponent(url.pathname.substring(1)) + url.search;
+        }
       } catch {
         return this.createErrorResponse(400, 'Invalid URL encoding');
       }
@@ -1084,7 +1182,7 @@ class CiaoCorsServer {
       }
 
       // 检查并发限制
-      if (!(await this.concurrencyLimiter.acquire(clientIP))) {
+      if (!this.concurrencyLimiter.acquire(clientIP)) {
         return this.createErrorResponse(503, 'Concurrency limit exceeded', {
           retryAfter: 5
         });
@@ -1095,7 +1193,7 @@ class CiaoCorsServer {
 
       try {
         // 安全验证
-        const validation = validateRequest(targetPath, clientIP, this.config, origin || undefined);
+        const validation = await validateRequest(targetPath, clientIP, this.config, origin || undefined);
         if (!validation.valid) {
           return this.createErrorResponse(403, validation.reason || 'Request blocked');
         }
@@ -1103,9 +1201,15 @@ class CiaoCorsServer {
         // 执行代理请求
         const targetUrl = fixUrl(targetPath);
 
-        // 检查GET请求的缓存（包含关键请求头以避免冲突）
-        const cacheKey = await this.generateCacheKey(request, targetUrl);
-        const cachedResponse = request.method === 'GET' ? this.responseCache.get(cacheKey) : undefined;
+        // 检查GET请求的缓存
+        // 安全规则1：请求含有认证凭证（Authorization/Cookie/Token）时，禁止读取和写入公共缓存
+        const hasAuthHeader = request.headers.has('authorization') ||
+                              request.headers.has('cookie') ||
+                              request.headers.has('token') ||
+                              request.headers.has('x-access-token');
+        const canCheckCache = request.method === 'GET' && !hasAuthHeader;
+        const cacheKey = canCheckCache ? await this.generateCacheKey(request, targetUrl) : '';
+        const cachedResponse = canCheckCache ? this.responseCache.get(cacheKey) : undefined;
 
         if (cachedResponse && (Date.now() - cachedResponse.timestamp < this.cacheTTL)) {
           // 返回缓存的响应副本
@@ -1124,7 +1228,7 @@ class CiaoCorsServer {
             // 执行新请求
             const proxyResponse = await performProxy(request, targetUrl, this.config);
 
-            // 构建响应
+            // 构建响应（支持 SSE / 长连接纯流式透传）
             response = new Response(proxyResponse.body, {
               status: proxyResponse.status,
               statusText: proxyResponse.statusText,
@@ -1133,8 +1237,16 @@ class CiaoCorsServer {
 
             success = proxyResponse.status < 400;
 
-            // 缓存GET请求的成功响应
-            if (request.method === 'GET' && success) {
+            // 缓存安全评估：
+            // 1. 无敏感认证头
+            // 2. 上游未标记 no-store/no-cache/private
+            // 3. 非流式长连接响应（text/event-stream 等）
+            const cc = proxyResponse.headers.get('cache-control')?.toLowerCase() || '';
+            const isNoStore = cc.includes('no-store') || cc.includes('no-cache') || cc.includes('private');
+            const ct = proxyResponse.headers.get('content-type')?.toLowerCase() || '';
+            const isStreaming = ct.includes('text/event-stream') || ct.includes('application/x-ndjson') || ct.includes('multipart/x-mixed-replace');
+
+            if (canCheckCache && success && !isNoStore && !isStreaming) {
               this.responseCache.set(cacheKey, {
                 response: response.clone(),
                 timestamp: Date.now()
@@ -1162,7 +1274,7 @@ class CiaoCorsServer {
         return response;
         
       } finally {
-        await this.concurrencyLimiter.release(clientIP);
+        this.concurrencyLimiter.release(clientIP);
       }
 
     } catch (error) {
@@ -1335,6 +1447,7 @@ class CiaoCorsServer {
           this.rateLimiter = new RateLimiter(newConfig.rateLimitWindow, newConfig.rateLimit);
           this.concurrencyLimiter = new ConcurrencyLimiter(newConfig.concurrentLimit, newConfig.totalConcurrentLimit);
           this.logger = new Logger(newConfig.enableLogging, newConfig.logWebhook);
+          this.responseCache = new LRUCache(newConfig.maxCacheEntries);
 
           return new Response(JSON.stringify({
             success: true,
@@ -1353,6 +1466,8 @@ class CiaoCorsServer {
               removeOriginHeader: newConfig.removeOriginHeader,
               enableKeywordBlock: newConfig.enableKeywordBlock,
               blockedKeywords: newConfig.blockedKeywords.length,
+              maxCacheEntries: newConfig.maxCacheEntries,
+              dropHeaders: newConfig.dropHeaders.length,
               logWebhook: newConfig.logWebhook ? '***' : undefined,
               allowedOrigins: newConfig.allowedOrigins.length,
               allowedDomains: newConfig.allowedDomains.length,
@@ -1551,6 +1666,8 @@ async function main() {
   🛡️ Header validation: ${config.requireHeaders ? 'enabled' : 'disabled'}
   ✂️ Remove Origin header: ${config.removeOriginHeader ? 'enabled' : 'disabled'}
   🚫 Keyword blocking: ${config.enableKeywordBlock ? `enabled (${config.blockedKeywords.length} keywords)` : 'disabled'}
+  📦 LRU Cache capacity: ${config.maxCacheEntries} entries
+  ✂️ Drop upstream headers: ${config.dropHeaders.length > 0 ? config.dropHeaders.join(', ') : 'none'}
 ====================================================
   `);
   
