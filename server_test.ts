@@ -1182,6 +1182,49 @@ Deno.test('Header exemption: redirect to non-exempt domain cannot bypass header 
   }
 });
 
+Deno.test('Header exemption: cached response cannot bypass redirect re-check', async () => {
+  const stub = installNetworkStub((url) => {
+    if (url.includes('cache-exempt.example.net')) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: 'https://non-exempt.example.org/secret' },
+      });
+    }
+    return new Response('secret', {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=60' },
+    });
+  });
+
+  try {
+    await withServer({
+      REQUIRE_HEADERS: 'true',
+      REQUIRE_HEADERS_EXEMPT_DOMAINS: 'cache-exempt.example.net',
+      ENABLE_LOGGING: 'false',
+      ENABLE_CACHE: 'true',
+    }, async (server) => {
+      const target = 'http://localhost:3000/cache-exempt.example.net/start';
+
+      // 空 Origin 头被视作“已提供”，允许经豁免域名跳转到非豁免域名，并把结果写入缓存。
+      const primed = await server.handleRequest(
+        new Request(target, { headers: { 'Origin': '' } }),
+      );
+      assertEquals(primed.status, 200);
+      assertEquals(await primed.text(), 'secret');
+      assertEquals(stub.calls.length, 2);
+
+      // 同路径的无头请求必须重新执行头校验与重定向复检，不能命中上面写入的缓存。
+      const res = await server.handleRequest(new Request(target));
+      assertEquals(res.status, 500);
+      const body = await res.json();
+      assertMatch(body.message, /Redirect blocked/);
+      assertEquals(stub.calls.length, 3, 'header-less request must not reuse the cached response');
+    });
+  } finally {
+    stub.restore();
+  }
+});
+
 Deno.test('Header exemption: redirect between exempt domains is allowed', async () => {
   const stub = installNetworkStub((url) => {
     if (url.includes('first-exempt.example.net')) {

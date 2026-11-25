@@ -1978,7 +1978,7 @@ export class CiaoCorsServer {
         const requestCacheControl = (request.headers.get('cache-control') || '').toLowerCase();
         const bypassCache = requestCacheControl.includes('no-cache') || requestCacheControl.includes('no-store');
         const canCheckCache = this.config.enableCache && request.method === 'GET' && !hasAuthHeader && !bypassCache;
-        const cacheKey = canCheckCache ? await this.generateCacheKey(request, targetUrl) : '';
+        const cacheKey = canCheckCache ? await this.generateCacheKey(request, targetUrl, headerCheckBypassed) : '';
         const cachedEntry = canCheckCache ? this.responseCache.get(cacheKey, request.headers) : undefined;
 
         if (cachedEntry && (Date.now() - cachedEntry.timestamp < this.config.cacheTtl)) {
@@ -2562,13 +2562,20 @@ export class CiaoCorsServer {
   }
 
   // 生成缓存键
-  private async generateCacheKey(request: Request, targetUrl: string): Promise<string> {
+  private async generateCacheKey(
+    request: Request,
+    targetUrl: string,
+    headerCheckBypassed: boolean,
+  ): Promise<string> {
     const method = request.method;
     const accept = request.headers.get('accept') || '';
     const acceptLanguage = request.headers.get('accept-language') || '';
     const origin = request.headers.get('origin') || '';
+    // 头校验结论是响应内容的边界条件：依靠域名豁免进入的请求与普通请求必须分区缓存，
+    // 否则无头请求可能命中经豁免域名跳转得到的非豁免内容，绕过重定向复检。
+    const headerCheckState = headerCheckBypassed ? 'exempt-bypass' : 'header-checked';
 
-    const keyData = `${method}:${targetUrl}:${origin}:${accept}:${acceptLanguage}`;
+    const keyData = `${method}:${targetUrl}:${origin}:${accept}:${acceptLanguage}:${headerCheckState}`;
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(keyData));
     return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
