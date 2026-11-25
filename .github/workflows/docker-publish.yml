@@ -109,7 +109,6 @@ jobs:
             type=semver,pattern={{major}}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -136,7 +135,7 @@ jobs:
           tags: |
             type=raw,value=amd64,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ steps.repo-meta.outputs.version }}-amd64,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=sha-${{ github.sha }}-amd64
+            type=sha,prefix=sha-,format=short,suffix=-amd64
 
       - name: Build and push dedicated amd64 image
         if: github.event_name != 'pull_request'
