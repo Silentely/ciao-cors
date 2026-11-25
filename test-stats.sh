@@ -36,7 +36,7 @@ main() {
     clear
     print_separator
     echo -e "${BLUE}🧪 CIAO-CORS 统计功能测试工具 v1.3.2${NC}"
-    echo -e "${BLUE}📦 项目地址: https://github.com/bestZwei/ciao-cors${NC}"
+    echo -e "${BLUE}📦 项目地址: https://github.com/Silentely/ciao-cors${NC}"
     print_separator
     echo
     

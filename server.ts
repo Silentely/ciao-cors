@@ -1,7 +1,7 @@
 /**
  * CIAO-CORS - 高性能 CORS 代理服务
  * 支持环境变量配置、请求限制、黑白名单、统计、LRU 缓存与容器化部署
- * 作者: bestZwei
+ * 作者: Silentely
  * 项目: https://github.com/Silentely/ciao-cors
  */
 

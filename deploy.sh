@@ -2,8 +2,8 @@
 
 # CIAO-CORS 一键部署和管理脚本
 # 支持安装、配置、监控、更新、卸载等完整功能
-# 作者: bestZwei
-# 项目: https://github.com/bestZwei/ciao-cors
+# 作者: Silentely
+# 项目: https://github.com/Silentely/ciao-cors
 
 # ==================== 全局变量 ====================
 SCRIPT_VERSION="1.3.2"
@@ -13,7 +13,7 @@ INSTALL_DIR="/opt/ciao-cors"
 SERVICE_NAME="ciao-cors"
 CONFIG_FILE="/etc/ciao-cors/config.env"
 LOG_FILE="/var/log/ciao-cors.log"
-GITHUB_REPO="https://raw.githubusercontent.com/bestZwei/ciao-cors/main"
+GITHUB_REPO="https://raw.githubusercontent.com/Silentely/ciao-cors/main"
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 BACKUP_DIR="/opt/ciao-cors/backups"
 LOCK_FILE="/var/lock/ciao-cors-deploy.lock"
@@ -1281,7 +1281,7 @@ create_systemd_service() {
     cat > "$SYSTEMD_SERVICE_FILE" << EOF
 [Unit]
 Description=CIAO-CORS Proxy Server v$SCRIPT_VERSION
-Documentation=https://github.com/bestZwei/ciao-cors
+Documentation=https://github.com/Silentely/ciao-cors
 After=network.target network-online.target
 Wants=network-online.target
 RequiresMountsFor=$INSTALL_DIR
@@ -1592,7 +1592,7 @@ show_service_info() {
         print_status "info" "配置文件: $CONFIG_FILE"
         print_status "info" "日志文件: $LOG_FILE"
         print_status "info" "安装目录: $INSTALL_DIR"
-        print_status "info" "项目地址: https://github.com/bestZwei/ciao-cors"
+        print_status "info" "项目地址: https://github.com/Silentely/ciao-cors"
 
         if [[ "$enable_stats" == "true" ]]; then
             print_status "info" "统计功能: 已启用"
@@ -2857,7 +2857,7 @@ check_script_update() {
         fi
     else
         print_status "warning" "无法检查脚本更新，请检查网络连接或稍后重试"
-        print_status "info" "你也可以手动从 https://github.com/bestZwei/ciao-cors 下载最新版本"
+        print_status "info" "你也可以手动从 https://github.com/Silentely/ciao-cors 下载最新版本"
     fi
 
     # 一并检查服务（server.ts）是否有更新
@@ -3025,7 +3025,7 @@ uninstall_service() {
 
     echo
     print_status "title" "感谢使用 CIAO-CORS！"
-    print_status "info" "项目地址: https://github.com/bestZwei/ciao-cors"
+    print_status "info" "项目地址: https://github.com/Silentely/ciao-cors"
     print_status "info" "如有问题或建议，请提交Issue或Pull Request"
     exit $EXIT_SUCCESS
 }
@@ -3037,7 +3037,7 @@ show_main_menu() {
     clear
     print_separator
     print_status "title" "   🚀 CIAO-CORS 一键部署管理脚本 v$SCRIPT_VERSION"
-    print_status "title" "   📦 项目地址: https://github.com/bestZwei/ciao-cors"
+    print_status "title" "   📦 项目地址: https://github.com/Silentely/ciao-cors"
     print_separator
     echo
     
@@ -3103,7 +3103,7 @@ show_install_menu() {
     clear
     print_separator
     print_status "title" "   📦 CIAO-CORS 安装向导"
-    print_status "title" "   📦 项目地址: https://github.com/bestZwei/ciao-cors"
+    print_status "title" "   📦 项目地址: https://github.com/Silentely/ciao-cors"
     print_separator
     echo
     
@@ -3245,7 +3245,7 @@ main() {
 
     # 显示脚本信息
     print_status "info" "CIAO-CORS 部署脚本 v$SCRIPT_VERSION 启动"
-    print_status "info" "项目地址: https://github.com/bestZwei/ciao-cors"
+    print_status "info" "项目地址: https://github.com/Silentely/ciao-cors"
     print_status "info" "PID: $$"
 
     # 主循环
@@ -3300,7 +3300,7 @@ main() {
     done
 
     print_status "info" "感谢使用 CIAO-CORS 部署脚本！"
-    print_status "info" "项目地址: https://github.com/bestZwei/ciao-cors"
+    print_status "info" "项目地址: https://github.com/Silentely/ciao-cors"
 }
 
 # 脚本入口点
