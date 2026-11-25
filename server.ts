@@ -23,7 +23,7 @@ const DEFAULT_BLOCKED_KEYWORDS: string[] = [
   '.acc',
   'googlevideo.com',
   'photocall.tv',
-  'liveradio.ie'
+  'liveradio.ie',
 ];
 
 export interface Config {
@@ -70,13 +70,13 @@ export function loadConfig(): Config {
     if (!str) return [];
     try {
       const parsed = JSON.parse(str);
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
         return parsed.filter(Boolean);
       } else {
-        return str.split(',').map(s => s.trim()).filter(Boolean);
+        return str.split(',').map((s) => s.trim()).filter(Boolean);
       }
     } catch {
-      return str.split(',').map(s => s.trim()).filter(Boolean);
+      return str.split(',').map((s) => s.trim()).filter(Boolean);
     }
   };
 
@@ -118,10 +118,26 @@ export function loadConfig(): Config {
     blockedIPs: parseArray(Deno.env.get('BLOCKED_IPS')),
     blockedDomains: parseArray(Deno.env.get('BLOCKED_DOMAINS')),
     allowedDomains: parseArray(Deno.env.get('ALLOWED_DOMAINS')),
-    rateLimit: validatePositiveInt(parseInt(Deno.env.get('RATE_LIMIT') || String(defaultRateLimit)), defaultRateLimit, 'RATE_LIMIT'),
-    rateLimitWindow: validatePositiveInt(parseInt(Deno.env.get('RATE_LIMIT_WINDOW') || '60000'), 60000, 'RATE_LIMIT_WINDOW'),
-    concurrentLimit: validatePositiveInt(parseInt(Deno.env.get('CONCURRENT_LIMIT') || String(defaultConcurrentLimit)), defaultConcurrentLimit, 'CONCURRENT_LIMIT'),
-    totalConcurrentLimit: validatePositiveInt(parseInt(Deno.env.get('TOTAL_CONCURRENT_LIMIT') || String(defaultTotalConcurrentLimit)), defaultTotalConcurrentLimit, 'TOTAL_CONCURRENT_LIMIT'),
+    rateLimit: validatePositiveInt(
+      parseInt(Deno.env.get('RATE_LIMIT') || String(defaultRateLimit)),
+      defaultRateLimit,
+      'RATE_LIMIT',
+    ),
+    rateLimitWindow: validatePositiveInt(
+      parseInt(Deno.env.get('RATE_LIMIT_WINDOW') || '60000'),
+      60000,
+      'RATE_LIMIT_WINDOW',
+    ),
+    concurrentLimit: validatePositiveInt(
+      parseInt(Deno.env.get('CONCURRENT_LIMIT') || String(defaultConcurrentLimit)),
+      defaultConcurrentLimit,
+      'CONCURRENT_LIMIT',
+    ),
+    totalConcurrentLimit: validatePositiveInt(
+      parseInt(Deno.env.get('TOTAL_CONCURRENT_LIMIT') || String(defaultTotalConcurrentLimit)),
+      defaultTotalConcurrentLimit,
+      'TOTAL_CONCURRENT_LIMIT',
+    ),
     apiKey: Deno.env.get('API_KEY')?.trim() || undefined,
     proxyApiKey: Deno.env.get('PROXY_API_KEY')?.trim() || undefined,
     trustedProxies: parseArray(Deno.env.get('TRUSTED_PROXIES')),
@@ -129,29 +145,50 @@ export function loadConfig(): Config {
     enableLogging: Deno.env.get('ENABLE_LOGGING') !== 'false',
     logWebhook: Deno.env.get('LOG_WEBHOOK')?.trim() || undefined,
     maxUrlLength: validatePositiveInt(parseInt(Deno.env.get('MAX_URL_LENGTH') || '2048'), 2048, 'MAX_URL_LENGTH'),
-    maxBodySize: validatePositiveInt(parseInt(Deno.env.get('MAX_BODY_SIZE') || String(defaultMaxBodySize)), defaultMaxBodySize, 'MAX_BODY_SIZE'),
+    maxBodySize: validatePositiveInt(
+      parseInt(Deno.env.get('MAX_BODY_SIZE') || String(defaultMaxBodySize)),
+      defaultMaxBodySize,
+      'MAX_BODY_SIZE',
+    ),
     timeout: validatePositiveInt(parseInt(Deno.env.get('TIMEOUT') || '30000'), 30000, 'TIMEOUT'),
     requireHeaders: Deno.env.get('REQUIRE_HEADERS') !== 'false',
-    removeOriginHeader: Deno.env.get('REMOVE_ORIGIN_HEADER') === 'true' || Deno.env.get('DROP_ORIGIN_HEADER') === 'true',
+    removeOriginHeader: Deno.env.get('REMOVE_ORIGIN_HEADER') === 'true' ||
+      Deno.env.get('DROP_ORIGIN_HEADER') === 'true',
     enableKeywordBlock: Deno.env.get('ENABLE_KEYWORD_BLOCK') !== 'false',
     blockedKeywords: (() => {
       const raw = Deno.env.get('BLOCKED_KEYWORDS') || Deno.env.get('BLOCK_KEYWORDS');
       return raw !== undefined ? parseArray(raw) : [...DEFAULT_BLOCKED_KEYWORDS];
     })(),
     enableCache: Deno.env.get('ENABLE_CACHE') !== 'false',
-    maxCacheEntries: validatePositiveInt(parseInt(Deno.env.get('MAX_CACHE_ENTRIES') || String(defaultMaxCacheEntries)), defaultMaxCacheEntries, 'MAX_CACHE_ENTRIES'),
-    maxCacheBytes: validatePositiveInt(parseInt(Deno.env.get('MAX_CACHE_BYTES') || String(defaultMaxCacheBytes)), defaultMaxCacheBytes, 'MAX_CACHE_BYTES'),
-    maxCacheEntryBytes: validatePositiveInt(parseInt(Deno.env.get('MAX_CACHE_ENTRY_BYTES') || String(defaultMaxCacheEntryBytes)), defaultMaxCacheEntryBytes, 'MAX_CACHE_ENTRY_BYTES'),
-    cacheTtl: validatePositiveInt(parseInt(Deno.env.get('CACHE_TTL') || String(defaultCacheTtl)), defaultCacheTtl, 'CACHE_TTL'),
+    maxCacheEntries: validatePositiveInt(
+      parseInt(Deno.env.get('MAX_CACHE_ENTRIES') || String(defaultMaxCacheEntries)),
+      defaultMaxCacheEntries,
+      'MAX_CACHE_ENTRIES',
+    ),
+    maxCacheBytes: validatePositiveInt(
+      parseInt(Deno.env.get('MAX_CACHE_BYTES') || String(defaultMaxCacheBytes)),
+      defaultMaxCacheBytes,
+      'MAX_CACHE_BYTES',
+    ),
+    maxCacheEntryBytes: validatePositiveInt(
+      parseInt(Deno.env.get('MAX_CACHE_ENTRY_BYTES') || String(defaultMaxCacheEntryBytes)),
+      defaultMaxCacheEntryBytes,
+      'MAX_CACHE_ENTRY_BYTES',
+    ),
+    cacheTtl: validatePositiveInt(
+      parseInt(Deno.env.get('CACHE_TTL') || String(defaultCacheTtl)),
+      defaultCacheTtl,
+      'CACHE_TTL',
+    ),
     dropHeaders: parseArray(Deno.env.get('DROP_HEADERS')),
     forwardSetCookie: Deno.env.get('FORWARD_SET_COOKIE') === 'true',
-    enableManagementApi: Deno.env.get('ENABLE_MANAGEMENT_API') !== 'false'
+    enableManagementApi: Deno.env.get('ENABLE_MANAGEMENT_API') !== 'false',
   };
 
   const validateArrayConfig = (arr: string[], name: string) => {
-    if (arr.some(item => typeof item !== 'string' || item.trim() === '')) {
+    if (arr.some((item) => typeof item !== 'string' || item.trim() === '')) {
       console.warn(`Warning: ${name} contains invalid entries, filtering out empty values`);
-      return arr.filter(item => typeof item === 'string' && item.trim() !== '');
+      return arr.filter((item) => typeof item === 'string' && item.trim() !== '');
     }
     return arr;
   };
@@ -161,7 +198,7 @@ export function loadConfig(): Config {
   config.blockedDomains = validateArrayConfig(config.blockedDomains, 'BLOCKED_DOMAINS');
   config.allowedDomains = validateArrayConfig(config.allowedDomains, 'ALLOWED_DOMAINS');
   config.blockedKeywords = validateArrayConfig(config.blockedKeywords, 'BLOCKED_KEYWORDS');
-  config.dropHeaders = validateArrayConfig(config.dropHeaders, 'DROP_HEADERS').map(h => h.toLowerCase());
+  config.dropHeaders = validateArrayConfig(config.dropHeaders, 'DROP_HEADERS').map((h) => h.toLowerCase());
   config.trustedProxies = validateArrayConfig(config.trustedProxies, 'TRUSTED_PROXIES');
 
   return config;
@@ -250,7 +287,7 @@ class RateLimiter {
     }
     return {
       totalIPs: this.buckets.size,
-      totalRequests
+      totalRequests,
     };
   }
 }
@@ -421,7 +458,7 @@ class ConcurrencyLimiter {
   getStats(): { perIpCount: Map<string, number>; totalCount: number } {
     return {
       perIpCount: new Map(this.perIpCount),
-      totalCount: this.totalCount
+      totalCount: this.totalCount,
     };
   }
 }
@@ -518,11 +555,17 @@ export function isPrivateOrReservedIP(ip: string): boolean {
   const v6Parts = parseIPv6(cleanIp);
   if (v6Parts !== null) {
     // 检查是否为 IPv4-mapped IPv6 (::ffff:0:0/96) 或 NAT64 (64:ff9b::/96)
-    if (v6Parts[0] === 0 && v6Parts[1] === 0 && v6Parts[2] === 0 && v6Parts[3] === 0 && v6Parts[4] === 0 && v6Parts[5] === 0xffff) {
+    if (
+      v6Parts[0] === 0 && v6Parts[1] === 0 && v6Parts[2] === 0 && v6Parts[3] === 0 && v6Parts[4] === 0 &&
+      v6Parts[5] === 0xffff
+    ) {
       const embeddedV4 = ((v6Parts[6] << 16) | v6Parts[7]) >>> 0;
       return isPrivateIPv4(embeddedV4);
     }
-    if (v6Parts[0] === 0x0064 && v6Parts[1] === 0xff9b && v6Parts[2] === 0 && v6Parts[3] === 0 && v6Parts[4] === 0 && v6Parts[5] === 0) {
+    if (
+      v6Parts[0] === 0x0064 && v6Parts[1] === 0xff9b && v6Parts[2] === 0 && v6Parts[3] === 0 && v6Parts[4] === 0 &&
+      v6Parts[5] === 0
+    ) {
       const embeddedV4 = ((v6Parts[6] << 16) | v6Parts[7]) >>> 0;
       return isPrivateIPv4(embeddedV4);
     }
@@ -533,9 +576,9 @@ export function isPrivateOrReservedIP(ip: string): boolean {
     }
 
     // ::/128 (未指定地址)
-    if (v6Parts.every(p => p === 0)) return true;
+    if (v6Parts.every((p) => p === 0)) return true;
     // ::1/128 (回环)
-    if (v6Parts.slice(0, 7).every(p => p === 0) && v6Parts[7] === 1) return true;
+    if (v6Parts.slice(0, 7).every((p) => p === 0) && v6Parts[7] === 1) return true;
     // fc00::/7 (唯一本地地址 ULA，涵盖 fc00-fdff，含 AWS IMDSv6 fd00:ec2::254)
     if ((v6Parts[0] & 0xfe00) === 0xfc00) return true;
     // fe80::/10 (链路本地地址)
@@ -624,15 +667,15 @@ export function isTrustedIP(ip: string, trustedList: string[]): boolean {
 export function resolveClientIP(
   request: Request,
   remoteAddr: { hostname: string } | undefined,
-  config: Config
+  config: Config,
 ): string {
   const peerIP = remoteAddr?.hostname ? remoteAddr.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '') : '';
 
   if (!peerIP) {
     return request.headers.get('cf-connecting-ip') ||
-           request.headers.get('x-real-ip') ||
-           request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-           '127.0.0.1';
+      request.headers.get('x-real-ip') ||
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      '127.0.0.1';
   }
 
   if (config.trustedProxies.length > 0 && isTrustedIP(peerIP, config.trustedProxies)) {
@@ -645,7 +688,7 @@ export function resolveClientIP(
     const xff = request.headers.get('x-forwarded-for');
     if (xff) {
       // 从右向左寻找第一个非受信代理的 IP
-      const ips = xff.split(',').map(s => s.trim()).filter(Boolean);
+      const ips = xff.split(',').map((s) => s.trim()).filter(Boolean);
       for (let i = ips.length - 1; i >= 0; i--) {
         const ip = ips[i];
         if (!isTrustedIP(ip, config.trustedProxies)) {
@@ -727,7 +770,7 @@ async function verifyDomainResolution(hostname: string): Promise<{ safe: boolean
 
       const [aRecords, aaaaRecords] = await Promise.race([
         Promise.all([resolveA, resolveAAAA]),
-        timeoutPromise
+        timeoutPromise,
       ]) as [string[], string[]];
 
       const records: string[] = [];
@@ -753,7 +796,7 @@ async function verifyDomainResolution(hostname: string): Promise<{ safe: boolean
     } catch (e) {
       return {
         safe: false,
-        reason: `Target domain DNS lookup failed: ${e instanceof Error ? e.message : 'Unknown DNS error'}`
+        reason: `Target domain DNS lookup failed: ${e instanceof Error ? e.message : 'Unknown DNS error'}`,
       };
     } finally {
       if (dnsTimeoutId !== undefined) {
@@ -804,10 +847,10 @@ async function validateTargetUrl(rawUrl: string): Promise<{ valid: boolean; reas
     'metadata',
     'instance-data',
     'consul',
-    'vault.service.consul'
+    'vault.service.consul',
   ];
 
-  if (restrictedDomains.some(domain => hostname === domain || hostname.endsWith('.' + domain))) {
+  if (restrictedDomains.some((domain) => hostname === domain || hostname.endsWith('.' + domain))) {
     return { valid: false, reason: 'Access to restricted domains is not allowed' };
   }
 
@@ -821,7 +864,27 @@ async function validateTargetUrl(rawUrl: string): Promise<{ valid: boolean; reas
   const port = targetUrl.port;
   if (port) {
     const portNum = parseInt(port, 10);
-    const restrictedPorts = [22, 23, 25, 53, 135, 139, 445, 993, 995, 1433, 1521, 3306, 3389, 5432, 5984, 6379, 9200, 11211, 27017];
+    const restrictedPorts = [
+      22,
+      23,
+      25,
+      53,
+      135,
+      139,
+      445,
+      993,
+      995,
+      1433,
+      1521,
+      3306,
+      3389,
+      5432,
+      5984,
+      6379,
+      9200,
+      11211,
+      27017,
+    ];
     if (restrictedPorts.includes(portNum)) {
       return { valid: false, reason: 'Access to restricted ports is not allowed' };
     }
@@ -843,16 +906,14 @@ function findBlockedKeyword(url: string, config: Config): string | undefined {
   } catch {
     // 解码失败继续使用原字符串
   }
-  return config.blockedKeywords.find(kw => lowerUrl.includes(kw.toLowerCase()));
+  return config.blockedKeywords.find((kw) => lowerUrl.includes(kw.toLowerCase()));
 }
 
 /**
  * 域名黑名单校验（包含子域名）
  */
 function isDomainBlocked(domain: string, config: Config): boolean {
-  return config.blockedDomains.some(blocked =>
-    domain === blocked || domain.endsWith('.' + blocked)
-  );
+  return config.blockedDomains.some((blocked) => domain === blocked || domain.endsWith('.' + blocked));
 }
 
 /**
@@ -862,15 +923,18 @@ function isDomainAllowed(domain: string, config: Config): boolean {
   if (config.allowedDomains.length === 0) {
     return true;
   }
-  return config.allowedDomains.some(allowed =>
-    domain === allowed || domain.endsWith('.' + allowed)
-  );
+  return config.allowedDomains.some((allowed) => domain === allowed || domain.endsWith('.' + allowed));
 }
 
 /**
  * 综合安全检查：验证目标 URL 和请求来源
  */
-async function validateRequest(url: string, ip: string, config: Config, origin?: string | null): Promise<{ valid: boolean; reason?: string }> {
+async function validateRequest(
+  url: string,
+  ip: string,
+  config: Config,
+  origin?: string | null,
+): Promise<{ valid: boolean; reason?: string }> {
   // 检查 IP 黑名单
   if (config.blockedIPs.length > 0 && config.blockedIPs.includes(ip)) {
     return { valid: false, reason: 'IP blocked' };
@@ -963,11 +1027,24 @@ function fixUrl(url: string): string {
 export function buildProxyHeaders(originalHeaders: Headers, config?: Config): Headers {
   const headers = new Headers();
   const dropHeaders = new Set([
-    'content-length', 'host', 'connection', 'keep-alive',
-    'proxy-authenticate', 'proxy-authorization', 'te', 'trailers',
-    'transfer-encoding', 'upgrade', 'cf-connecting-ip', 'cf-ray',
-    'cf-visitor', 'cf-ipcountry', 'x-proxy-key', 'x-forwarded-for',
-    'x-real-ip', 'forwarded'
+    'content-length',
+    'host',
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailers',
+    'transfer-encoding',
+    'upgrade',
+    'cf-connecting-ip',
+    'cf-ray',
+    'cf-visitor',
+    'cf-ipcountry',
+    'x-proxy-key',
+    'x-forwarded-for',
+    'x-real-ip',
+    'forwarded',
   ]);
 
   const shouldRemoveOrigin = config?.removeOriginHeader ||
@@ -995,10 +1072,16 @@ export function buildProxyHeaders(originalHeaders: Headers, config?: Config): He
 
   // 默认 User-Agent
   if (!headers.has('user-agent')) {
-    headers.set('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    headers.set(
+      'user-agent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    );
   }
   if (!headers.has('accept')) {
-    headers.set('accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8');
+    headers.set(
+      'accept',
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    );
   }
   if (!headers.has('accept-language')) {
     headers.set('accept-language', 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7');
@@ -1075,24 +1158,25 @@ async function performProxy(
   request: Request,
   targetUrl: string,
   config: Config,
-  body: Uint8Array | undefined
+  body: Uint8Array | undefined,
 ): Promise<Response> {
   const headers = buildProxyHeaders(request.headers, config);
 
   const maxRetries = 2;
   const retryDelay = [100, 300];
   const maxRedirects = 5;
-  const isIdempotent = ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS'].includes(request.method) || request.headers.has('idempotency-key');
+  const isIdempotent = ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS'].includes(request.method) ||
+    request.headers.has('idempotency-key');
 
   const shouldRetry = (error: any, attempt: number): boolean => {
     if (attempt >= maxRetries || !isIdempotent) return false;
     if (error instanceof Error) {
       const message = error.message.toLowerCase();
       return message.includes('network') ||
-             message.includes('connection') ||
-             message.includes('econnrefused') ||
-             message.includes('timeout') ||
-             message.includes('fetch');
+        message.includes('connection') ||
+        message.includes('econnrefused') ||
+        message.includes('timeout') ||
+        message.includes('fetch');
     }
     return false;
   };
@@ -1152,7 +1236,7 @@ async function performProxy(
           body: currentBody,
           signal: controller.signal,
           redirect: 'manual',
-          cache: request.headers.get('cache-control')?.includes('no-cache') ? 'no-cache' : 'default'
+          cache: request.headers.get('cache-control')?.includes('no-cache') ? 'no-cache' : 'default',
         });
 
         const location = response.headers.get('location');
@@ -1193,7 +1277,7 @@ async function performProxy(
           console.warn(`Attempt ${attempt + 1} failed with status ${response.status}, retrying...`);
           await response.body?.cancel();
           clearTimeout(timeoutId);
-          await new Promise(resolve => setTimeout(resolve, retryDelay[attempt]));
+          await new Promise((resolve) => setTimeout(resolve, retryDelay[attempt]));
           break;
         }
 
@@ -1206,15 +1290,17 @@ async function performProxy(
       if (error instanceof Error && error.name === 'AbortError') {
         if (attempt < maxRetries && isIdempotent) {
           console.warn(`Attempt ${attempt + 1} timed out, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, retryDelay[attempt]));
+          await new Promise((resolve) => setTimeout(resolve, retryDelay[attempt]));
           continue;
         }
         throw new Error('Request timeout after retries');
       }
 
       if (shouldRetry(error, attempt)) {
-        console.warn(`Attempt ${attempt + 1} failed: ${error instanceof Error ? error.message : 'Unknown error'}, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay[attempt]));
+        console.warn(
+          `Attempt ${attempt + 1} failed: ${error instanceof Error ? error.message : 'Unknown error'}, retrying...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryDelay[attempt]));
         continue;
       }
 
@@ -1260,7 +1346,7 @@ class StatsCollector {
       topIPs: new Map(),
       statusCodes: new Map(),
       averageResponseTime: 0,
-      startTime: Date.now()
+      startTime: Date.now(),
     };
 
     if (this.enabled) {
@@ -1322,7 +1408,7 @@ class StatsCollector {
 
     this.hourlyStats.push({
       timestamp: now,
-      requests: Math.max(0, hourlyIncrement)
+      requests: Math.max(0, hourlyIncrement),
     });
 
     this.lastHourRequestCount = currentRequests;
@@ -1336,7 +1422,7 @@ class StatsCollector {
       ...this.stats,
       topDomains: new Map(Array.from(this.stats.topDomains.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)),
       topIPs: new Map(Array.from(this.stats.topIPs.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)),
-      hourlyStats: this.hourlyStats
+      hourlyStats: this.hourlyStats,
     };
   }
 
@@ -1363,7 +1449,7 @@ class StatsCollector {
       requestsPerMinute: requestsLastMinute,
       averageResponseTime: this.stats.averageResponseTime,
       errorRate,
-      topEndpoints
+      topEndpoints,
     };
   }
 
@@ -1376,7 +1462,7 @@ class StatsCollector {
       topIPs: new Map(),
       statusCodes: new Map(),
       averageResponseTime: 0,
-      startTime: Date.now()
+      startTime: Date.now(),
     };
     this.responseTimes = [];
     this.secondBuckets.fill(0);
@@ -1429,11 +1515,13 @@ class Logger {
       statusCode: response.status,
       responseTime,
       userAgent: sanitizedUserAgent,
-      ip: clientIP || 'unknown'
+      ip: clientIP || 'unknown',
     };
 
     if (this.enableConsole) {
-      console.log(`[${logData.timestamp}] ${logData.method} ${logData.url} -> ${logData.proxyUrl} (${logData.statusCode}) ${logData.responseTime}ms`);
+      console.log(
+        `[${logData.timestamp}] ${logData.method} ${logData.url} -> ${logData.proxyUrl} (${logData.statusCode}) ${logData.responseTime}ms`,
+      );
     }
 
     if (this.webhookUrl) {
@@ -1459,7 +1547,7 @@ class Logger {
       timestamp: new Date().toISOString(),
       level: 'ERROR',
       message: error.message,
-      context: safeContext
+      context: safeContext,
     };
 
     if (this.enableConsole) {
@@ -1471,7 +1559,7 @@ class Logger {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(logData),
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(5000),
       }).catch(() => {});
     }
   }
@@ -1485,7 +1573,7 @@ class Logger {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ logs }),
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(5000),
       }).catch(() => {});
     }
   }
@@ -1502,12 +1590,21 @@ class Logger {
   private sanitizeUrl(url: string): string {
     try {
       const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url);
-      const base = hasScheme
-        ? url
-        : `http://example.com${url.startsWith('/') ? '' : '/'}${url}`;
+      const base = hasScheme ? url : `http://example.com${url.startsWith('/') ? '' : '/'}${url}`;
       const urlObj = new URL(base);
-      const sensitiveParams = ['key', 'token', 'password', 'secret', 'auth', 'api_key', 'proxy_key', 'access_token', 'refresh_token', 'client_secret'];
-      sensitiveParams.forEach(param => {
+      const sensitiveParams = [
+        'key',
+        'token',
+        'password',
+        'secret',
+        'auth',
+        'api_key',
+        'proxy_key',
+        'access_token',
+        'refresh_token',
+        'client_secret',
+      ];
+      sensitiveParams.forEach((param) => {
         if (urlObj.searchParams.has(param)) {
           urlObj.searchParams.set(param, '***');
         }
@@ -1549,7 +1646,7 @@ export class CiaoCorsServer {
     this.responseCache = new ByteLRUCache(
       this.config.maxCacheEntries,
       this.config.maxCacheBytes,
-      this.config.maxCacheEntryBytes
+      this.config.maxCacheEntryBytes,
     );
 
     if (this.config.enableCache) {
@@ -1562,7 +1659,9 @@ export class CiaoCorsServer {
   }
 
   async handleRequest(request: Request, remoteAddr?: { hostname: string }): Promise<Response> {
-    const requestId = crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const requestId = crypto.randomUUID
+      ? crypto.randomUUID()
+      : `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const startTime = Date.now();
     const clientIP = this.resolveClientIP(request, remoteAddr);
     const origin = request.headers.get('origin');
@@ -1588,19 +1687,25 @@ export class CiaoCorsServer {
 
       // 3. 处理健康检查路径（无外部依赖，不要求鉴权与并发槽）
       if (targetPath === 'health' || targetPath === '_health') {
-        const healthHeaders = this.buildCorsHeaders(new Headers({
-          'Content-Type': 'application/json'
-        }), origin || undefined);
-        return new Response(JSON.stringify({
-          status: 'healthy',
-          ok: true,
-          healthy: true,
-          timestamp: new Date().toISOString(),
-          version: VERSION,
-          profile: this.config.resourceProfile
-        }), {
-          headers: healthHeaders
-        });
+        const healthHeaders = this.buildCorsHeaders(
+          new Headers({
+            'Content-Type': 'application/json',
+          }),
+          origin || undefined,
+        );
+        return new Response(
+          JSON.stringify({
+            status: 'healthy',
+            ok: true,
+            healthy: true,
+            timestamp: new Date().toISOString(),
+            version: VERSION,
+            profile: this.config.resourceProfile,
+          }),
+          {
+            headers: healthHeaders,
+          },
+        );
       }
 
       // 4. 处理管理 API 路由
@@ -1610,25 +1715,28 @@ export class CiaoCorsServer {
 
       // 5. 验证基本 URL 格式与长度
       if (targetPath.length > this.config.maxUrlLength) {
-        return this.createErrorResponse(400, "URL too long");
+        return this.createErrorResponse(400, 'URL too long');
       }
-      if (targetPath.length < 3 || (!targetPath.includes('.') && !targetPath.includes(':') && !targetPath.startsWith('localhost')) ||
-          targetPath === 'favicon.ico' || targetPath === 'robots.txt') {
+      if (
+        targetPath.length < 3 ||
+        (!targetPath.includes('.') && !targetPath.includes(':') && !targetPath.startsWith('localhost')) ||
+        targetPath === 'favicon.ico' || targetPath === 'robots.txt'
+      ) {
         return this.createErrorResponse(400, 'Invalid URL format', {
           usage: 'https://your-domain.com/{target-url} or https://your-domain.com/?url={target-url}',
-          example: 'https://your-domain.com/httpbin.org/get'
+          example: 'https://your-domain.com/httpbin.org/get',
         });
       }
 
       // 6. 独立代理访问鉴权 (PROXY_API_KEY)
       if (this.config.proxyApiKey) {
         const proxyKey = request.headers.get('x-proxy-key') ||
-                         request.headers.get('proxy-authorization')?.replace(/^Bearer\s+/i, '') ||
-                         proxyKeyFromQuery;
+          request.headers.get('proxy-authorization')?.replace(/^Bearer\s+/i, '') ||
+          proxyKeyFromQuery;
 
         if (!proxyKey || !this.constantTimeCompare(proxyKey, this.config.proxyApiKey)) {
           return this.createErrorResponse(401, 'Invalid or missing Proxy API Key', {
-            header: 'X-Proxy-Key'
+            header: 'X-Proxy-Key',
           }, origin || undefined);
         }
       }
@@ -1638,16 +1746,21 @@ export class CiaoCorsServer {
         const hasOrigin = request.headers.has('origin');
         const hasXRequestedWith = request.headers.has('x-requested-with');
         if (!hasOrigin && !hasXRequestedWith) {
-          return this.createErrorResponse(403, 'Missing required request header. Must specify one of: origin, x-requested-with', {
-            usage: 'Add "Origin" or "X-Requested-With" header to your request'
-          }, origin || undefined);
+          return this.createErrorResponse(
+            403,
+            'Missing required request header. Must specify one of: origin, x-requested-with',
+            {
+              usage: 'Add "Origin" or "X-Requested-With" header to your request',
+            },
+            origin || undefined,
+          );
         }
       }
 
       // 8. 请求频率限制
       if (!this.rateLimiter.checkLimit(clientIP)) {
         return this.createErrorResponse(429, 'Rate limit exceeded', {
-          retryAfter: Math.ceil(this.config.rateLimitWindow / 1000)
+          retryAfter: Math.ceil(this.config.rateLimitWindow / 1000),
         }, origin || undefined);
       }
 
@@ -1656,7 +1769,7 @@ export class CiaoCorsServer {
       const lease = concurrencyLimiter.acquire(clientIP);
       if (!lease) {
         return this.createErrorResponse(503, 'Concurrency limit exceeded', {
-          retryAfter: 5
+          retryAfter: 5,
         }, origin || undefined);
       }
 
@@ -1673,9 +1786,15 @@ export class CiaoCorsServer {
         const validation = await validateRequest(targetPath, clientIP, this.config, origin || undefined);
         if (!validation.valid) {
           releaseLease();
-          const isDnsFailure = validation.reason?.includes("could not be resolved") || validation.reason?.includes("DNS lookup failed");
+          const isDnsFailure = validation.reason?.includes('could not be resolved') ||
+            validation.reason?.includes('DNS lookup failed');
           const statusCode = isDnsFailure ? 502 : 403;
-          return this.createErrorResponse(statusCode, validation.reason || "Request blocked", undefined, origin || undefined);
+          return this.createErrorResponse(
+            statusCode,
+            validation.reason || 'Request blocked',
+            undefined,
+            origin || undefined,
+          );
         }
 
         const targetUrl = fixUrl(targetPath);
@@ -1686,9 +1805,9 @@ export class CiaoCorsServer {
         // 3. 不含认证凭证（Authorization, Cookie, Token 等）
         // 4. 客户端未显式要求绕过缓存（no-cache / no-store）
         const hasAuthHeader = request.headers.has('authorization') ||
-                              request.headers.has('cookie') ||
-                              request.headers.has('token') ||
-                              request.headers.has('x-access-token');
+          request.headers.has('cookie') ||
+          request.headers.has('token') ||
+          request.headers.has('x-access-token');
         const requestCacheControl = (request.headers.get('cache-control') || '').toLowerCase();
         const bypassCache = requestCacheControl.includes('no-cache') || requestCacheControl.includes('no-store');
         const canCheckCache = this.config.enableCache && request.method === 'GET' && !hasAuthHeader && !bypassCache;
@@ -1711,11 +1830,17 @@ export class CiaoCorsServer {
           const response = new Response(cachedEntry.body as unknown as BodyInit, {
             status: cachedEntry.status,
             statusText: cachedEntry.statusText,
-            headers: this.buildCorsHeaders(cachedHeaders, origin || undefined)
+            headers: this.buildCorsHeaders(cachedHeaders, origin || undefined),
           });
 
           if (this.config.enableStats) {
-            this.statsCollector.recordRequest(clientIP, new URL(targetUrl).hostname, response.status, Date.now() - startTime, true);
+            this.statsCollector.recordRequest(
+              clientIP,
+              new URL(targetUrl).hostname,
+              response.status,
+              Date.now() - startTime,
+              true,
+            );
           }
           this.logger.logRequest(request, response, targetUrl, Date.now() - startTime, clientIP);
 
@@ -1733,11 +1858,13 @@ export class CiaoCorsServer {
         const cc = (proxyResponse.headers.get('cache-control') || '').toLowerCase();
         const isNoStore = cc.includes('no-store') || cc.includes('no-cache') || cc.includes('private');
         const ct = (proxyResponse.headers.get('content-type') || '').toLowerCase();
-        const isStreaming = ct.includes('text/event-stream') || ct.includes('application/x-ndjson') || ct.includes('multipart/x-mixed-replace');
+        const isStreaming = ct.includes('text/event-stream') || ct.includes('application/x-ndjson') ||
+          ct.includes('multipart/x-mixed-replace');
         const hasSetCookie = proxyResponse.headers.has('set-cookie');
         const isVaryStar = (proxyResponse.headers.get('vary') || '').trim() === '*';
 
-        const shouldCache = canCheckCache && success && !isNoStore && !isStreaming && !hasSetCookie && !isVaryStar && proxyResponse.status === 200;
+        const shouldCache = canCheckCache && success && !isNoStore && !isStreaming && !hasSetCookie && !isVaryStar &&
+          proxyResponse.status === 200;
 
         const corsHeaders = this.buildCorsHeaders(proxyResponse.headers, origin || undefined);
 
@@ -1747,10 +1874,16 @@ export class CiaoCorsServer {
           const response = new Response(null, {
             status: proxyResponse.status,
             statusText: proxyResponse.statusText,
-            headers: corsHeaders
+            headers: corsHeaders,
           });
           if (this.config.enableStats) {
-            this.statsCollector.recordRequest(clientIP, new URL(targetUrl).hostname, response.status, Date.now() - startTime, success);
+            this.statsCollector.recordRequest(
+              clientIP,
+              new URL(targetUrl).hostname,
+              response.status,
+              Date.now() - startTime,
+              success,
+            );
           }
           this.logger.logRequest(request, response, targetUrl, Date.now() - startTime, clientIP);
           return response;
@@ -1812,7 +1945,7 @@ export class CiaoCorsServer {
                       body: fullBody,
                       timestamp: Date.now(),
                       size: fullBody.byteLength + 512,
-                      vary: varyRecord
+                      vary: varyRecord,
                     });
                   }
                   return;
@@ -1838,7 +1971,7 @@ export class CiaoCorsServer {
             cancel(reason) {
               releaseLease();
               return reader.cancel(reason);
-            }
+            },
           });
         } else {
           // 普通流式响应（如 SSE 或大文件）：绑定 lease 生命周期，在真正传输完毕或断开时再释放槽位
@@ -1864,23 +1997,28 @@ export class CiaoCorsServer {
             cancel(reason) {
               releaseLease();
               return reader.cancel(reason);
-            }
+            },
           });
         }
 
         const response = new Response(finalStream, {
           status: proxyResponse.status,
           statusText: proxyResponse.statusText,
-          headers: corsHeaders
+          headers: corsHeaders,
         });
 
         if (this.config.enableStats) {
-          this.statsCollector.recordRequest(clientIP, new URL(targetUrl).hostname, response.status, Date.now() - startTime, success);
+          this.statsCollector.recordRequest(
+            clientIP,
+            new URL(targetUrl).hostname,
+            response.status,
+            Date.now() - startTime,
+            success,
+          );
         }
         this.logger.logRequest(request, response, targetUrl, Date.now() - startTime, clientIP);
 
         return response;
-
       } catch (innerError) {
         releaseLease();
         if (innerError instanceof PayloadTooLargeError) {
@@ -1888,13 +2026,12 @@ export class CiaoCorsServer {
         }
         throw innerError;
       }
-
     } catch (error) {
       this.logger.logError(error as Error, {
         url: request.url,
         ip: clientIP,
         requestId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       if (this.config.enableStats) {
@@ -1902,12 +2039,17 @@ export class CiaoCorsServer {
       }
 
       const sanitizedMessage = error instanceof Error
-        ? (error.message.includes('ENOTFOUND') ? 'Target host not found' :
-           error.message.includes('ECONNREFUSED') ? 'Connection refused' :
-           error.message.includes('timeout') ? 'Request timeout' :
-           error.message.includes('Too many redirects') ? 'Too many redirects' :
-           error.message.includes('Redirect blocked') ? error.message :
-           'Proxy error')
+        ? (error.message.includes('ENOTFOUND')
+          ? 'Target host not found'
+          : error.message.includes('ECONNREFUSED')
+          ? 'Connection refused'
+          : error.message.includes('timeout')
+          ? 'Request timeout'
+          : error.message.includes('Too many redirects')
+          ? 'Too many redirects'
+          : error.message.includes('Redirect blocked')
+          ? error.message
+          : 'Proxy error')
         : 'Unknown error';
 
       return this.createErrorResponse(500, 'Proxy error', { message: sanitizedMessage }, origin || undefined);
@@ -1928,7 +2070,7 @@ export class CiaoCorsServer {
 
     return new Response(null, {
       status: 204,
-      headers
+      headers,
     });
   }
 
@@ -1942,7 +2084,7 @@ export class CiaoCorsServer {
     if (this.config.apiKey) {
       const authHeader = request.headers.get('authorization');
       const providedKey = authHeader?.replace(/^Bearer\s+/i, '') ||
-                          new URL(request.url).searchParams.get('key');
+        new URL(request.url).searchParams.get('key');
 
       if (!providedKey || !this.constantTimeCompare(providedKey, this.config.apiKey)) {
         return this.createErrorResponse(401, 'Invalid API key');
@@ -1961,46 +2103,58 @@ export class CiaoCorsServer {
           const rateLimiterStats = this.rateLimiter.getStats();
           const concurrencyStats = this.concurrencyLimiter.getStats();
 
-          return new Response(JSON.stringify({
-            stats: {
-              ...stats,
-              topDomains: Object.fromEntries(stats.topDomains),
-              topIPs: Object.fromEntries(stats.topIPs),
-              statusCodes: Object.fromEntries(stats.statusCodes),
-              hourlyStats: stats.hourlyStats
+          return new Response(
+            JSON.stringify(
+              {
+                stats: {
+                  ...stats,
+                  topDomains: Object.fromEntries(stats.topDomains),
+                  topIPs: Object.fromEntries(stats.topIPs),
+                  statusCodes: Object.fromEntries(stats.statusCodes),
+                  hourlyStats: stats.hourlyStats,
+                },
+                rateLimiter: rateLimiterStats,
+                concurrency: {
+                  totalCount: concurrencyStats.totalCount,
+                  activeIPs: concurrencyStats.perIpCount.size,
+                },
+                cache: {
+                  entries: this.responseCache.size,
+                  bytes: this.responseCache.totalBytes,
+                  maxBytes: this.config.maxCacheBytes,
+                  maxEntries: this.config.maxCacheEntries,
+                },
+                uptime: Date.now() - stats.startTime,
+                version: VERSION,
+              },
+              null,
+              2,
+            ),
+            {
+              headers: { 'Content-Type': 'application/json' },
             },
-            rateLimiter: rateLimiterStats,
-            concurrency: {
-              totalCount: concurrencyStats.totalCount,
-              activeIPs: concurrencyStats.perIpCount.size
-            },
-            cache: {
-              entries: this.responseCache.size,
-              bytes: this.responseCache.totalBytes,
-              maxBytes: this.config.maxCacheBytes,
-              maxEntries: this.config.maxCacheEntries
-            },
-            uptime: Date.now() - stats.startTime,
-            version: VERSION
-          }, null, 2), {
-            headers: { 'Content-Type': 'application/json' }
-          });
+          );
         }
 
       case 'health':
-        return new Response(JSON.stringify({
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-          version: VERSION,
-          profile: this.config.resourceProfile,
-          memory: (Deno as any).memoryUsage ? {
-            rss: (Deno as any).memoryUsage().rss,
-            heapTotal: (Deno as any).memoryUsage().heapTotal,
-            heapUsed: (Deno as any).memoryUsage().heapUsed
-          } : undefined
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return new Response(
+          JSON.stringify({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            version: VERSION,
+            profile: this.config.resourceProfile,
+            memory: (Deno as any).memoryUsage
+              ? {
+                rss: (Deno as any).memoryUsage().rss,
+                heapTotal: (Deno as any).memoryUsage().heapTotal,
+                heapUsed: (Deno as any).memoryUsage().heapUsed,
+              }
+              : undefined,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
 
       case 'config': {
         const safeConfig = { ...this.config } as any;
@@ -2009,7 +2163,7 @@ export class CiaoCorsServer {
         if (safeConfig.logWebhook) safeConfig.logWebhook = '***';
 
         return new Response(JSON.stringify(safeConfig, null, 2), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
         });
       }
 
@@ -2018,46 +2172,58 @@ export class CiaoCorsServer {
           return this.createErrorResponse(404, 'Stats disabled');
         }
         this.statsCollector.reset();
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Statistics reset successfully'
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Statistics reset successfully',
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
 
       case 'clear-cache': {
         const cacheSize = this.responseCache.size;
         const cacheBytes = this.responseCache.totalBytes;
         this.responseCache.clear();
-        return new Response(JSON.stringify({
-          success: true,
-          message: `Cache cleared successfully (${cacheSize} entries, ${cacheBytes} bytes)`
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Cache cleared successfully (${cacheSize} entries, ${cacheBytes} bytes)`,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
       }
 
       case 'reload-config':
         try {
           this.reloadConfig();
-          return new Response(JSON.stringify({
-            success: true,
-            message: 'Configuration reloaded successfully',
-            timestamp: new Date().toISOString(),
-            profile: this.config.resourceProfile
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Configuration reloaded successfully',
+              timestamp: new Date().toISOString(),
+              profile: this.config.resourceProfile,
+            }),
+            {
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         } catch (error) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Failed to reload configuration',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            timestamp: new Date().toISOString()
-          }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          });
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Failed to reload configuration',
+              message: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: new Date().toISOString(),
+            }),
+            {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         }
 
       case 'performance':
@@ -2065,18 +2231,21 @@ export class CiaoCorsServer {
           return this.createErrorResponse(404, 'Stats disabled');
         }
         return new Response(JSON.stringify(this.statsCollector.getPerformanceData(), null, 2), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
         });
 
       case 'version':
-        return new Response(JSON.stringify({
-          version: VERSION,
-          runtime: `Deno ${Deno.version.deno}`,
-          typescript: Deno.version.typescript,
-          v8: Deno.version.v8
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return new Response(
+          JSON.stringify({
+            version: VERSION,
+            runtime: `Deno ${Deno.version.deno}`,
+            typescript: Deno.version.typescript,
+            v8: Deno.version.v8,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
 
       default:
         return this.createErrorResponse(404, 'API endpoint not found');
@@ -2096,7 +2265,7 @@ export class CiaoCorsServer {
         headers.set('Vary', 'Origin');
         return;
       }
-      const varyValues = existingVary.toLowerCase().split(',').map(s => s.trim());
+      const varyValues = existingVary.toLowerCase().split(',').map((s) => s.trim());
       if (!varyValues.includes('origin')) {
         headers.set('Vary', `${existingVary}, Origin`);
       }
@@ -2116,7 +2285,7 @@ export class CiaoCorsServer {
       'access-control-expose-headers',
       'connection',
       'keep-alive',
-      'transfer-encoding'
+      'transfer-encoding',
     ]);
 
     if (!this.config.forwardSetCookie) {
@@ -2137,8 +2306,10 @@ export class CiaoCorsServer {
     this.applyCorsOrigin(headers, origin);
 
     headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-    headers.set('Access-Control-Allow-Headers',
-      'Accept, Authorization, Cache-Control, Content-Type, DNT, If-Modified-Since, Keep-Alive, Origin, User-Agent, X-Requested-With, Token, x-access-token, X-Proxy-Key, Proxy-Authorization');
+    headers.set(
+      'Access-Control-Allow-Headers',
+      'Accept, Authorization, Cache-Control, Content-Type, DNT, If-Modified-Since, Keep-Alive, Origin, User-Agent, X-Requested-With, Token, x-access-token, X-Proxy-Key, Proxy-Authorization',
+    );
     headers.set('Access-Control-Expose-Headers', '*');
     headers.set('Access-Control-Max-Age', '86400');
 
@@ -2151,11 +2322,11 @@ export class CiaoCorsServer {
       code,
       message,
       timestamp: new Date().toISOString(),
-      ...details
+      ...details,
     };
 
     const headers = new Headers({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     });
 
     this.applyCorsOrigin(headers, origin);
@@ -2166,7 +2337,7 @@ export class CiaoCorsServer {
 
     return new Response(JSON.stringify(body, null, 2), {
       status: code,
-      headers
+      headers,
     });
   }
 
@@ -2198,7 +2369,7 @@ export class CiaoCorsServer {
 
     const keyData = `${method}:${targetUrl}:${origin}:${accept}:${acceptLanguage}`;
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(keyData));
-    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   reloadConfig(): void {
@@ -2219,7 +2390,7 @@ export class CiaoCorsServer {
     this.responseCache = new ByteLRUCache(
       newConfig.maxCacheEntries,
       newConfig.maxCacheBytes,
-      newConfig.maxCacheEntryBytes
+      newConfig.maxCacheEntryBytes,
     );
 
     if (newConfig.enableCache) {
@@ -2266,13 +2437,21 @@ async function main() {
   🛡️ Header validation: ${config.requireHeaders ? 'enabled' : 'disabled'}
   ✂️ Remove Origin header: ${config.removeOriginHeader ? 'enabled' : 'disabled'}
   🚫 Keyword blocking: ${config.enableKeywordBlock ? `enabled (${config.blockedKeywords.length} keywords)` : 'disabled'}
-  📦 LRU Cache: ${config.enableCache ? `enabled (max ${config.maxCacheEntries} entries, ${Math.round(config.maxCacheBytes / 1024 / 1024)}MB total, max ${Math.round(config.maxCacheEntryBytes / 1024)}KB/entry)` : 'disabled'}
+  📦 LRU Cache: ${
+    config.enableCache
+      ? `enabled (max ${config.maxCacheEntries} entries, ${
+        Math.round(config.maxCacheBytes / 1024 / 1024)
+      }MB total, max ${Math.round(config.maxCacheEntryBytes / 1024)}KB/entry)`
+      : 'disabled'
+  }
   ✂️ Drop upstream headers: ${config.dropHeaders.length > 0 ? config.dropHeaders.join(', ') : 'none'}
 ====================================================
   `);
 
   if (config.enableManagementApi && !config.apiKey) {
-    console.warn('⚠️  Management API is enabled without API_KEY; /_api/* is publicly accessible. Set API_KEY or ENABLE_MANAGEMENT_API=false.');
+    console.warn(
+      '⚠️  Management API is enabled without API_KEY; /_api/* is publicly accessible. Set API_KEY or ENABLE_MANAGEMENT_API=false.',
+    );
   }
 
   const abortController = new AbortController();
@@ -2309,7 +2488,7 @@ async function main() {
       onError: (error) => {
         console.error('Server error:', error);
         return new Response('Internal Server Error', { status: 500 });
-      }
+      },
     }, (request: Request, info: any) => {
       return server.handleRequest(request, info?.remoteAddr);
     });
@@ -2338,7 +2517,7 @@ export default {
       deployServer = new CiaoCorsServer();
     }
     return deployServer.handleRequest(request, info?.remoteAddr);
-  }
+  },
 };
 
 if (import.meta.main) {
