@@ -17,7 +17,7 @@
 - 📦 **双重有界 LRU 缓存**：同时限制最大条目数与内存总字节数。采用旁路 Tap 采集，彻底杜绝原有 `Response.clone()` 带来的内存无界膨胀；自动隔离 Authorization 与 Set-Cookie，防跨用户缓存污染。
 - 🛡️ **严格 SSRF 深度防御**：完整拦截 IPv4、IPv6、IPv4-mapped IPv6、NAT64、6to4、链路本地及保留网段；精准阻断云厂商内部元数据（`169.254.169.254`、`169.254.42.42` 等）；DNS 解析坚持 fail-closed 策略（解析失败立即拦截，杜绝绕过）。
 - ⚡ **流式防打爆与精准并发控制**：超大 chunked 上传实时按块统计，超限立即中断并返回 413；并发计数与流生命周期（SSE、长连接）强绑定，彻底解决计数漂移。
-- 🔑 **独立代理访问鉴权**：新增可选的 `PROXY_API_KEY`（支持 `X-Proxy-Key` 或 `Proxy-Authorization`），不污染客户端发向上游的真实 `Authorization` 请求头，浏览器 OPTIONS 预检自动友好放行。
+- 🔑 **独立代理访问鉴权**：新增可选的 `PROXY_API_KEY`（支持 `X-Proxy-Key`、`Proxy-Authorization` 或 `?proxy_key=`，鉴权参数不会转发给上游），不污染客户端发向上游的真实 `Authorization` 请求头，浏览器 OPTIONS 预检自动友好放行。
 
 ---
 
@@ -102,7 +102,7 @@ docker compose up -d
 ### 方案 B：云容器 / Serverless 部署
 
 直接使用公开 GHCR 镜像部署到任意支持容器的云平台：
-- **镜像地址 (Image)**：`ghcr.io/silentely/ciao-cors:latest`（或指定架构 `latest-amd64` / `1.3.2`）
+- **镜像地址 (Image)**：`ghcr.io/silentely/ciao-cors:latest`（或指定架构标签 `amd64` / `1.3.2-amd64`，以及版本标签 `1.3.2`）
 - **端口 (Port)**：`3000`
 - **健康检查 (Health Check)**：`/health`
 - **环境变量 (可选)**：低配容器推荐设置 `RESOURCE_PROFILE=low-memory`
@@ -138,7 +138,15 @@ sudo ./deploy.sh
 | `RESOURCE_PROFILE` | `standard` | **资源配置模式**。低配容器/VPS 请设为 `low-memory` |
 | `PROXY_API_KEY` | *(未设置)* | **代理使用密钥**。配置后客户端必须携带此密钥才允许代理 |
 | `API_KEY` | *(未设置)* | **管理接口密钥**。保护 `/_api/stats`、`/_api/config` 等运维接口 |
+| `ENABLE_MANAGEMENT_API` | `true` | 是否启用 `/_api/*` 管理接口。设为 `false` 可完全关闭 |
 | `ENABLE_CACHE` | `true` | 是否启用内置 GET 响应缓存 |
+| `MAX_CACHE_BYTES` | `33554432`（低内存 `8388608`） | 缓存总字节上限 |
+| `MAX_CACHE_ENTRIES` | `1000`（低内存 `32`） | 缓存条目数上限 |
+| `CACHE_TTL` | `60000`（低内存 `15000`） | 缓存有效期（毫秒） |
+| `MAX_CACHE_ENTRY_BYTES` | `2097152`（低内存 `262144`） | 单条缓存响应的最大字节数 |
+| `FORWARD_SET_COOKIE` | `false` | 是否把上游 `Set-Cookie` 透传给客户端 |
+| `DROP_HEADERS` | *(未设置)* | 转发上游前额外剥离的请求头（逗号分隔） |
+| `TIMEOUT` | `30000` | 上游请求超时（毫秒） |
 | `REQUIRE_HEADERS` | `true` | 是否要求客户端携带 `Origin` 或 `X-Requested-With` 头部 |
 | `REMOVE_ORIGIN_HEADER` | `false` | 转发上游时是否去除 Origin 头（防目标网站防盗链拦截） |
 | `ENABLE_KEYWORD_BLOCK` | `true` | 是否拦截常见流媒体切片及高频滥用链接（如 `.m3u8`, `.ts` 等） |
@@ -151,13 +159,28 @@ sudo ./deploy.sh
 
 ## 🛠️ 管理与运维 API
 
-如果您配置了 `API_KEY=your-secret-key`，可以通过管理接口监控与维护服务：
+管理接口使用 `API_KEY` 保护，支持两种携带方式：
 
-- **健康状态**：`GET /_api/health?key=your-secret-key`（查看服务状态与内存 RSS）
-- **性能统计**：`GET /_api/stats?key=your-secret-key`（查看请求数、耗时与缓存占用）
-- **在线重载配置**：`GET /_api/reload-config?key=your-secret-key`
-- **清理内存缓存**：`GET /_api/clear-cache?key=your-secret-key`
-- **查看脱敏配置**：`GET /_api/config?key=your-secret-key`
+```bash
+# 查询参数
+curl "https://your-proxy-domain.com/_api/stats?key=your-secret-key"
+# Authorization: Bearer
+curl -H "Authorization: Bearer your-secret-key" \
+     "https://your-proxy-domain.com/_api/stats"
+```
+
+> ⚠️ 若未设置 `API_KEY`，`/_api/*` 默认对外开放（启动日志会给出警告）。生产环境请务必设置 `API_KEY`，或通过 `ENABLE_MANAGEMENT_API=false` 完全关闭管理接口。
+
+可用接口：
+
+- **健康状态**：`GET /_api/health`（查看服务状态与内存 RSS）
+- **性能统计**：`GET /_api/stats`（查看请求数、耗时与缓存占用）
+- **实时性能**：`GET /_api/performance`（查看每分钟请求数、错误率与热门目标）
+- **运行版本**：`GET /_api/version`
+- **在线重载配置**：`GET /_api/reload-config`（支持 `SIGHUP` 触发）
+- **重置统计**：`GET /_api/reset-stats`
+- **清理内存缓存**：`GET /_api/clear-cache`
+- **查看脱敏配置**：`GET /_api/config`
 
 ---
 

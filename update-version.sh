@@ -128,6 +128,7 @@ main() {
         "diagnose.sh"
         "test-stats.sh"
         "security-check.sh"
+        "Dockerfile"
         "README.md"
     )
     
