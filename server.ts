@@ -11,6 +11,21 @@
 const VERSION = '1.3.2';
 
 // ==================== 配置管理模块 ====================
+/**
+ * 默认阻断的常见URL关键字（参考 netnr/workers）
+ * 主要是流媒体分片切片、播放列表及高频被滥用消耗流量的流媒体站点
+ */
+const DEFAULT_BLOCKED_KEYWORDS: string[] = [
+  '.m3u8',
+  '.ts',
+  '.m4s',
+  '.mpd',
+  '.acc',
+  'googlevideo.com',
+  'photocall.tv',
+  'liveradio.ie'
+];
+
 interface Config {
   port: number;
   allowedOrigins: string[];
@@ -28,6 +43,9 @@ interface Config {
   maxUrlLength: number;
   timeout: number;
   requireHeaders: boolean;
+  removeOriginHeader: boolean;
+  enableKeywordBlock: boolean;
+  blockedKeywords: string[];
 }
 
 /**
@@ -84,7 +102,13 @@ function loadConfig(): Config {
     logWebhook: Deno.env.get('LOG_WEBHOOK')?.trim() || undefined,
     maxUrlLength: validatePositiveInt(parseInt(Deno.env.get('MAX_URL_LENGTH') || '2048'), 2048, 'MAX_URL_LENGTH'),
     timeout: validatePositiveInt(parseInt(Deno.env.get('TIMEOUT') || '30000'), 30000, 'TIMEOUT'),
-    requireHeaders: Deno.env.get('REQUIRE_HEADERS') !== 'false'
+    requireHeaders: Deno.env.get('REQUIRE_HEADERS') !== 'false',
+    removeOriginHeader: Deno.env.get('REMOVE_ORIGIN_HEADER') === 'true' || Deno.env.get('DROP_ORIGIN_HEADER') === 'true',
+    enableKeywordBlock: Deno.env.get('ENABLE_KEYWORD_BLOCK') !== 'false',
+    blockedKeywords: (() => {
+      const raw = Deno.env.get('BLOCKED_KEYWORDS') || Deno.env.get('BLOCK_KEYWORDS');
+      return raw !== undefined ? parseArray(raw) : [...DEFAULT_BLOCKED_KEYWORDS];
+    })()
   };
 
   // 验证数组配置的有效性
@@ -100,6 +124,7 @@ function loadConfig(): Config {
   config.blockedIPs = validateArrayConfig(config.blockedIPs, 'BLOCKED_IPS');
   config.blockedDomains = validateArrayConfig(config.blockedDomains, 'BLOCKED_DOMAINS');
   config.allowedDomains = validateArrayConfig(config.allowedDomains, 'ALLOWED_DOMAINS');
+  config.blockedKeywords = validateArrayConfig(config.blockedKeywords, 'BLOCKED_KEYWORDS');
 
   return config;
 }
@@ -329,6 +354,15 @@ function validateRequest(url: string, ip: string, config: Config, origin?: strin
     return { valid: false, reason: 'URL too long' };
   }
 
+  // 检查URL关键字黑名单（参考 netnr/workers 拦截流媒体切片及高频滥用关键字）
+  if (config.enableKeywordBlock && config.blockedKeywords.length > 0) {
+    const lowerUrl = url.toLowerCase();
+    const matched = config.blockedKeywords.find(kw => lowerUrl.includes(kw.toLowerCase()));
+    if (matched) {
+      return { valid: false, reason: `URL contains blocked keyword: ${matched}` };
+    }
+  }
+
   // 校验目标URL安全性（协议、控制字符、内网地址、受限端口）
   const check = validateTargetUrl(url);
   if (!check.valid || !check.targetUrl) {
@@ -387,7 +421,7 @@ function fixUrl(url: string): string {
 /**
  * 构建代理请求的headers
  */
-function buildProxyHeaders(originalHeaders: Headers): Record<string, string> {
+function buildProxyHeaders(originalHeaders: Headers, config?: Config): Record<string, string> {
   const proxyHeaders: Record<string, string> = {};
   const dropHeaders = [
     'content-length', 'host', 'connection', 'keep-alive',
@@ -395,6 +429,14 @@ function buildProxyHeaders(originalHeaders: Headers): Record<string, string> {
     'transfer-encoding', 'upgrade', 'cf-connecting-ip', 'cf-ray',
     'cf-visitor', 'cf-ipcountry'
   ];
+
+  const shouldRemoveOrigin = config?.removeOriginHeader ||
+                             originalHeaders.get('x-remove-origin') === 'true' ||
+                             originalHeaders.get('x-drop-origin') === 'true';
+  if (shouldRemoveOrigin) {
+    dropHeaders.push('origin');
+  }
+  dropHeaders.push('x-remove-origin', 'x-drop-origin');
 
   for (const [key, value] of originalHeaders.entries()) {
     const lowerKey = key.toLowerCase();
@@ -493,7 +535,7 @@ async function processRequestBody(request: Request): Promise<ArrayBuffer | undef
  * 重定向手动跟随，并对每一跳重新校验目标地址，防止通过重定向绕过SSRF防护
  */
 async function performProxy(request: Request, targetUrl: string, config: Config): Promise<Response> {
-  const headers = buildProxyHeaders(request.headers);
+  const headers = buildProxyHeaders(request.headers, config);
   const body = await processRequestBody(request);
 
   // 重试配置
@@ -527,7 +569,18 @@ async function performProxy(request: Request, targetUrl: string, config: Config)
   // 校验重定向目标：禁止跳转到内网地址、危险协议或黑名单域名
   const validateRedirectTarget = (location: string, baseUrl: string): string => {
     const resolved = new URL(location, baseUrl);
-    const check = validateTargetUrl(resolved.toString());
+    const resolvedStr = resolved.toString();
+
+    // 检查重定向目标关键字黑名单
+    if (config.enableKeywordBlock && config.blockedKeywords.length > 0) {
+      const lowerRedirect = resolvedStr.toLowerCase();
+      const matched = config.blockedKeywords.find(kw => lowerRedirect.includes(kw.toLowerCase()));
+      if (matched) {
+        throw new Error(`Redirect blocked: contains blocked keyword: ${matched}`);
+      }
+    }
+
+    const check = validateTargetUrl(resolvedStr);
     if (!check.valid || !check.targetUrl) {
       throw new Error(`Redirect blocked: ${check.reason}`);
     }
@@ -1296,6 +1349,10 @@ class CiaoCorsServer {
               totalConcurrentLimit: newConfig.totalConcurrentLimit,
               maxUrlLength: newConfig.maxUrlLength,
               timeout: newConfig.timeout,
+              requireHeaders: newConfig.requireHeaders,
+              removeOriginHeader: newConfig.removeOriginHeader,
+              enableKeywordBlock: newConfig.enableKeywordBlock,
+              blockedKeywords: newConfig.blockedKeywords.length,
               logWebhook: newConfig.logWebhook ? '***' : undefined,
               allowedOrigins: newConfig.allowedOrigins.length,
               allowedDomains: newConfig.allowedDomains.length,
@@ -1492,6 +1549,8 @@ async function main() {
   🔄 Concurrent limit: ${config.concurrentLimit} per IP, ${config.totalConcurrentLimit} total
   🔒 API key: ${config.apiKey ? 'configured' : 'not set'}
   🛡️ Header validation: ${config.requireHeaders ? 'enabled' : 'disabled'}
+  ✂️ Remove Origin header: ${config.removeOriginHeader ? 'enabled' : 'disabled'}
+  🚫 Keyword blocking: ${config.enableKeywordBlock ? `enabled (${config.blockedKeywords.length} keywords)` : 'disabled'}
 ====================================================
   `);
   
@@ -1500,6 +1559,11 @@ async function main() {
   }
   if (config.blockedDomains.length > 0) {
     console.log(`🚫 Domain blacklist: ${config.blockedDomains.length} domains`);
+  }
+  if (config.enableKeywordBlock && config.blockedKeywords.length > 0) {
+    const sample = config.blockedKeywords.slice(0, 5).join(', ');
+    const suffix = config.blockedKeywords.length > 5 ? '...' : '';
+    console.log(`🛡️ Keyword blacklist: ${config.blockedKeywords.length} keywords (${sample}${suffix})`);
   }
 
   // 捕获退出信号
