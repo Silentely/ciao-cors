@@ -572,7 +572,7 @@ function isPrivateIPv4(n: number): boolean {
   if (b0 === 100 && b1 === 100 && b2 === 100 && b3 === 200) return true;
   // 127.0.0.0/8 (回环)
   if (b0 === 127) return true;
-  // 169.254.0.0/16 (链路本地 / 云元数据：AWS 169.254.169.254, Scaleway 169.254.42.42, ECS 169.254.170.2)
+  // 169.254.0.0/16 (链路本地 / 云元数据：169.254.169.254, 169.254.42.42, 169.254.170.2)
   if (b0 === 169 && b1 === 254) return true;
   // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
   if (b0 === 172 && b1 >= 16 && b1 <= 31) return true;
@@ -733,9 +733,8 @@ async function validateTargetUrl(rawUrl: string): Promise<{ valid: boolean; reas
     'localhost',
     'metadata.google.internal',
     'metadata.goog',
-    'metadata.scaleway.com',
     '169.254.169.254',
-    '169.254.42.42', // Scaleway 内部元数据地址
+    '169.254.42.42', // 内部元数据地址
     'metadata',
     'instance-data',
     'consul',

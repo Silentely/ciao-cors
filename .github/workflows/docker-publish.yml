@@ -126,7 +126,7 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
-      - name: Docker metadata (dedicated amd64 tag for Scaleway)
+      - name: Docker metadata (dedicated amd64 tag)
         id: meta-amd64
         if: github.event_name != 'pull_request'
         uses: docker/metadata-action@v5

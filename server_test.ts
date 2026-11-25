@@ -108,7 +108,7 @@ Deno.test("SSRF Protection: Blocks loopback and private IPv4", async () => {
     "http://172.16.0.1/",
     "http://192.168.1.1/",
     "http://169.254.169.254/latest/meta-data/",
-    "http://169.254.42.42/", // Scaleway metadata
+    "http://169.254.42.42/", // Cloud metadata
     "http://100.100.100.200/" // Alibaba Cloud metadata
   ];
 
@@ -147,7 +147,6 @@ Deno.test("SSRF Protection: Blocks restricted domains and ports", async () => {
     "http://sub.localhost/",
     "http://metadata.google.internal/",
     "http://metadata.goog/",
-    "http://metadata.scaleway.com/",
     "http://example.com:22/", // SSH port
     "http://example.com:3306/", // MySQL port
     "http://example.com:6379/", // Redis port

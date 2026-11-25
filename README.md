@@ -1,9 +1,9 @@
 # CIAO-CORS
 
-高性能、开箱即用的跨平台 CORS 跨域代理服务。支持标准 **Docker 容器**、**Scaleway Serverless Containers 原地平滑迁移**、**Fly.io**、**Northflank**、**ClawCloud Run**、**Deno Deploy** 以及普通 **Linux VPS** 部署。
+高性能、开箱即用的跨平台 CORS 跨域代理服务。支持标准 **Docker 容器**、**Docker Compose**、各类主流云平台容器与 Serverless 环境、**Deno Deploy** 以及普通 **Linux VPS** 部署。
 
 > 💖 **致谢与鸣谢**：
-> 本项目基于 **[bestZwei/ciao-cors](https://github.com/bestZwei/ciao-cors)** 进行全方位升级，在保留原项目完备功能的基础上，进行了**生产级 Docker 容器化重构**、**Scaleway 极低资源（128MB）专项优化**与**全链路安全加固**。
+> 本项目基于 **[bestZwei/ciao-cors](https://github.com/bestZwei/ciao-cors)** 进行全方位升级，在保留原项目完备功能的基础上，进行了**生产级 Docker 容器化重构**、**轻量低内存专项优化**与**全链路安全加固**。
 > 感谢 **[DreamCloud](https://whmcs.as211392.com)** 为原项目提供的服务器与高防演示支持。
 
 ---
@@ -13,10 +13,9 @@
 相比原版，本项目针对生产环境（特别是低成本云容器与 Serverless 环境）进行了深度打磨：
 
 - 🐳 **生产级 Docker 容器化**：基于官方 Deno 2 稳定版镜像，非 root 安全用户运行，内置零外部网络依赖的健康检查探针（`/health`），多架构（`linux/amd64` 与 `linux/arm64`）自动发布。
-- 🚀 **Scaleway 极致低内存适配**：专为 **70mVCPU / 128MB RAM** 极低规格调优（`RESOURCE_PROFILE=low-memory`），实测常驻内存仅 **16.6 MB ~ 21.6 MB**，安全富余度超 80%，永不 OOM。
-- 🔄 **Scaleway 现存容器原地替换**：无需删除重建云资源，仅需在现有 Container 的 Settings 中替换镜像地址，即可保留原有 Container ID、访问链接、自定义域名及 SSL 证书。
+- 🚀 **超轻量低内存适配**：专为低内存规格调优（`RESOURCE_PROFILE=low-memory`），即使在 128MB 极低配环境下实测常驻内存也仅需 16~21 MB，运行稳定不 OOM。
 - 📦 **双重有界 LRU 缓存**：同时限制最大条目数与内存总字节数。采用旁路 Tap 采集，彻底杜绝原有 `Response.clone()` 带来的内存无界膨胀；自动隔离 Authorization 与 Set-Cookie，防跨用户缓存污染。
-- 🛡️ **严格 SSRF 深度防御**：完整拦截 IPv4、IPv6、IPv4-mapped IPv6、NAT64、6to4、链路本地及保留网段；精准阻断云厂商内部元数据（Scaleway `169.254.42.42`、AWS/GCP `169.254.169.254` 等）；DNS 解析坚持 fail-closed 策略（解析失败立即拦截，杜绝绕过）。
+- 🛡️ **严格 SSRF 深度防御**：完整拦截 IPv4、IPv6、IPv4-mapped IPv6、NAT64、6to4、链路本地及保留网段；精准阻断云厂商内部元数据（`169.254.169.254`、`169.254.42.42` 等）；DNS 解析坚持 fail-closed 策略（解析失败立即拦截，杜绝绕过）。
 - ⚡ **流式防打爆与精准并发控制**：超大 chunked 上传实时按块统计，超限立即中断并返回 413；并发计数与流生命周期（SSE、长连接）强绑定，彻底解决计数漂移。
 - 🔑 **独立代理访问鉴权**：新增可选的 `PROXY_API_KEY`（支持 `X-Proxy-Key` 或 `Proxy-Authorization`），不污染客户端发向上游的真实 `Authorization` 请求头，浏览器 OPTIONS 预检自动友好放行。
 
@@ -81,16 +80,15 @@ curl -H "X-Proxy-Key: your-proxy-key" \
 docker run -d \
   --name ciao-cors \
   -p 3000:3000 \
-  ghcr.io/silentely/ciao-cors:1.3.2
+  ghcr.io/silentely/ciao-cors:latest
 
-# 低内存模式启动（限制 128MB 内存，适合极低配 VPS）
+# 低内存模式启动（限制 128MB 内存，适合低配 VPS）
 docker run -d \
   --name ciao-cors \
   --memory=128m \
-  --cpus=0.07 \
   -e RESOURCE_PROFILE=low-memory \
   -p 3000:3000 \
-  ghcr.io/silentely/ciao-cors:1.3.2
+  ghcr.io/silentely/ciao-cors:latest
 ```
 
 #### 2. Docker Compose 启动
@@ -101,22 +99,14 @@ docker compose up -d
 
 ---
 
-### 方案 B：Scaleway Serverless Containers 原地迁移
+### 方案 B：云容器 / Serverless 部署
 
-如果您在 Scaleway 上已经有一个正在运行的旧容器，**无需删除或重新创建**，只需 3 步即可完成原地平滑迁移（**保留原域名、Container ID 与 HTTPS 证书**）：
+直接使用公开 GHCR 镜像部署到任意支持容器的云平台：
+- **镜像地址 (Image)**：`ghcr.io/silentely/ciao-cors:latest`（或指定架构 `latest-amd64` / `1.3.2`）
+- **端口 (Port)**：`3000`
+- **健康检查 (Health Check)**：`/health`
+- **环境变量 (可选)**：低配容器推荐设置 `RESOURCE_PROFILE=low-memory`
 
-1. 打开 Scaleway 控制台 -> 进入您的 Container -> 点击 **Settings**。
-2. 在 **Advanced options** 中清空可能残留的旧 **Command** 和 **Arguments**。
-3. 修改配置：
-   - **Image URL**: `ghcr.io/silentely/ciao-cors:1.3.2-amd64`（或 `1.3.2`）
-   - **Port**: `3000`
-   - **CPU / Memory**: `70 mVCPU` / `128 MB`（常驻推荐）或 `140 mVCPU` / `256 MB`
-   - **Environment Variables**: 添加 `RESOURCE_PROFILE` = `low-memory`
-   - **Health check path**: `/health`
-4. 点击右上角 **Deploy container**（或 Redeploy）即可！
-
-> 📖 详细的分步说明、两套部署方案（常驻模式 vs 按需休眠模式）及免费额度测算，请参阅：  
-> **[Scaleway 原地替换部署手册 (docs/deploy/scaleway.md)](docs/deploy/scaleway.md)**
 
 ---
 
@@ -145,7 +135,7 @@ sudo ./deploy.sh
 | 环境变量名 | 默认值 | 简要说明 |
 |---|---|---|
 | `PORT` | `3000` | 服务监听端口（各云平台通常会自动注入） |
-| `RESOURCE_PROFILE` | `standard` | **资源配置模式**。在 128MB 容器中请设为 `low-memory` |
+| `RESOURCE_PROFILE` | `standard` | **资源配置模式**。低配容器/VPS 请设为 `low-memory` |
 | `PROXY_API_KEY` | *(未设置)* | **代理使用密钥**。配置后客户端必须携带此密钥才允许代理 |
 | `API_KEY` | *(未设置)* | **管理接口密钥**。保护 `/_api/stats`、`/_api/config` 等运维接口 |
 | `ENABLE_CACHE` | `true` | 是否启用内置 GET 响应缓存 |
