@@ -1,577 +1,297 @@
 # CIAO-CORS
 
-高性能、功能完整的CORS代理服务，支持多种部署方式和丰富的配置选项。专为需要跨域资源访问的Web应用设计，提供了安全、可靠的代理解决方案。
+高性能、生产级 CORS 代理服务，支持标准 Docker 容器化、Scaleway Serverless Containers 原地部署、Fly.io、Northflank、ClawCloud Run、VPS 原生与 Deno Deploy。专为跨域资源访问、低内存云函数及反代中继设计，提供严格的 SSRF 防护、有界 LRU 缓存、流式限额与独立代理鉴权。
 
 🌐 **在线演示**: [cors.ciao.su](https://cors.ciao.su)
 
 感谢 **[DreamCloud](https://whmcs.as211392.com)** 提供的高防服务器支持，为本项目提供稳定可靠的演示环境。
 
-## 功能特性
-
-### 核心功能
-- 🚀 **高性能CORS代理**：支持所有HTTP方法和内容类型，轻松解决跨域问题
-- 🔒 **安全防护**：IP/域名黑白名单、恶意URL检测、请求验证
-- ⚡ **智能限流**：动态请求频率限制和并发控制，防止资源滥用
-- 📊 **实时监控**：详细的请求统计、性能分析和状态监控
-- 🎯 **智能缓存**：GET请求响应缓存，大幅提升性能和减少外部请求
-- 📝 **完整日志**：支持控制台和Webhook日志，便于追踪和分析
-- 🤖 **智能伪装**：优先转发真实User-Agent，自动添加浏览器标准头部，降低被识别为爬虫的风险
-- 🔄 **自动重试**：智能重试机制，自动处理网络波动和临时错误，大幅提升请求成功率
-
-### 配置选项
-- **黑白名单**：支持IP和域名级别的访问控制，精确管理代理权限
-- **频率限制**：可配置的滑动窗口请求限制，自动防御恶意流量
-- **并发控制**：单IP和全局并发数限制，确保系统稳定
-- **统计监控**：可选的请求统计和性能监控，实时了解系统状态
-- **API管理**：内置管理API，支持API密钥保护，安全管理系统
-
-### 部署方式
-- **Deno Deploy**：一键部署到全球CDN网络，极速响应全球请求
-- **VPS部署**：完整的一键安装和管理脚本，轻松管理自己的实例
-- **Docker容器**：支持容器化部署，快速集成到现有基础设施
-
-## 快速开始
-
-### Deno Deploy部署
-
-1. **克隆项目**
-   ```bash
-   git clone https://github.com/bestZwei/ciao-cors.git
-   cd ciao-cors
-   ```
-
-2. **创建Deno Deploy项目**
-   - 访问 [Deno Deploy](https://dash.deno.com)
-   - 创建新项目
-   - 选择"从GitHub部署"，选择您的仓库和server.ts文件
-
-3. **配置环境变量**
-   - 在Deno Deploy控制台中设置环境变量（可选）
-   - 可以配置API_KEY、限流参数、域名黑白名单等
-
-4. **开始使用**
-   - 通过 `https://your-project.deno.dev/example.com/api/endpoint` 格式访问
-   - 第一个路径段是您要请求的目标域名和路径
-
-### VPS部署
-
-1. **下载部署脚本**
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/bestZwei/ciao-cors/main/deploy.sh -o deploy.sh
-   chmod +x deploy.sh
-   ```
-
-2. **运行安装脚本**
-   ```bash
-   sudo ./deploy.sh
-   ```
-
-3. **按照菜单提示操作**
-   - 自动检测和安装Deno
-   - 配置服务参数（端口、API密钥等）
-   - 设置防火墙规则
-   - 创建系统服务
-
-#### 脚本功能特性
-
-- **🔒 安全性**: 脚本锁定机制防止并发执行，完整的权限检查
-- **🌐 兼容性**: 支持Ubuntu、Debian、CentOS、RHEL、Fedora等主流发行版
-- **🔧 智能安装**: 自动检测系统架构，支持x86_64和ARM64
-- **📦 依赖管理**: 自动安装必要依赖，智能包管理器检测
-- **🛡️ 防火墙**: 支持firewalld、ufw、iptables多种防火墙
-- **📋 备份恢复**: 自动备份配置和文件，支持一键恢复
-- **🔄 更新维护**: 内置脚本更新、服务更新、系统优化功能
-- **📊 监控诊断**: 健康检查、性能监控、日志分析
-- **🎯 用户友好**: 彩色输出、详细提示、错误处理
-
-## 高级配置
-
-### 环境变量
-
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `PORT` | `3000` | 服务监听端口 |
-| `RATE_LIMIT` | `2500` | 每个时间窗口的最大请求数 |
-| `RATE_LIMIT_WINDOW` | `60000` | 限流时间窗口（毫秒） |
-| `CONCURRENT_LIMIT` | `10` | 单IP最大并发数 |
-| `TOTAL_CONCURRENT_LIMIT` | `1000` | 全局最大并发数 |
-| `MAX_URL_LENGTH` | `2048` | 最大URL长度 |
-| `MAX_BODY_SIZE` | `10485760` | 最大请求体大小（字节，默认10MB） |
-| `TIMEOUT` | `30000` | 请求超时时间（毫秒） |
-| `ENABLE_STATS` | `false` | 是否启用统计功能 |
-| `ENABLE_LOGGING` | `true` | 是否启用日志记录 |
-| `API_KEY` | - | 管理API密钥（可选） |
-| `LOG_WEBHOOK` | - | 日志Webhook URL（可选） |
-| `ALLOWED_ORIGINS` | - | 允许的来源域名列表（JSON或逗号分隔） |
-| `BLOCKED_IPS` | - | 禁止的IP地址列表（JSON或逗号分隔） |
-| `BLOCKED_DOMAINS` | - | 禁止的域名列表（JSON或逗号分隔） |
-| `ALLOWED_DOMAINS` | - | 允许的域名列表（JSON或逗号分隔） |
-| `REQUIRE_HEADERS` | `true` | 是否强制要求Origin或X-Requested-With头部 |
-| `REMOVE_ORIGIN_HEADER` | `false` | 转发请求到目标服务器时是否移除Origin头部（防止目标防盗链拦截） |
-| `ENABLE_KEYWORD_BLOCK` | `true` | 是否启用URL关键字拦截（参考 netnr/workers 防滥用策略） |
-| `BLOCKED_KEYWORDS` | 默认流媒体切片 | URL阻断关键字列表（默认包含 `.m3u8, .ts, .m4s, .mpd, .acc, googlevideo.com, photocall.tv, liveradio.ie`） |
-| `MAX_CACHE_ENTRIES` | `1000` | LRU内存缓存最大容量条目数（防止内存无界增长） |
-| `DROP_HEADERS` | - | 转发代理请求时剥离的自定义请求头列表（JSON或逗号分隔，如 `cookie,referer`） |
-
-### 配置示例
-
-**基础配置**
-```bash
-export PORT=3000
-export RATE_LIMIT=100
-export ENABLE_STATS=true
-export API_KEY=your-secret-key
-```
-
-**安全配置**
-```bash
-export BLOCKED_IPS='["192.168.1.100", "10.0.0.5"]'
-export ALLOWED_DOMAINS='["api.example.com", "data.example.org"]'
-export BLOCKED_DOMAINS='["malicious.com", "spam.net"]'
-export REQUIRE_HEADERS=true  # 强制要求Origin或X-Requested-With头部
-export REMOVE_ORIGIN_HEADER=true  # 转发代理请求到目标服务器时移除Origin头部
-export ENABLE_KEYWORD_BLOCK=true  # 启用URL关键字拦截（默认已启用）
-export BLOCKED_KEYWORDS='[".m3u8", ".ts", ".m4s", ".mpd", ".acc", "googlevideo.com", "photocall.tv", "liveradio.ie"]'  # 自定义关键字拦截列表
-export MAX_CACHE_ENTRIES=1000  # LRU缓存容量上限
-export DROP_HEADERS="cookie,referer"  # 自定义剔除的上游请求头
-```
-
-**性能配置**
-```bash
-export CONCURRENT_LIMIT=20
-export TOTAL_CONCURRENT_LIMIT=2000
-export TIMEOUT=60000
-export RATE_LIMIT_WINDOW=30000
-```
-
-## API参考
-
-### 代理使用
-
-**基本代理格式**
-```
-https://your-domain.com/{target-url}
-```
-
-**使用示例**
-```bash
-# 代理GET请求（需要添加必需的头部）
-curl -H "X-Requested-With: XMLHttpRequest" \
-  https://your-domain.com/httpbin.org/get
-
-# 代理POST请求
-curl -X POST https://your-domain.com/jsonplaceholder.typicode.com/posts \
-  -H "Content-Type: application/json" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -d '{"title": "test", "body": "content"}'
-
-# 使用Origin头部（浏览器fetch会自动添加）
-curl -H "Origin: https://your-app.com" \
-  "https://your-domain.com/api.github.com/users/octocat"
-```
-
-**JavaScript fetch示例**
-```javascript
-// fetch会自动添加Origin头部，无需手动设置
-fetch('https://your-domain.com/httpbin.org/get')
-  .then(response => response.json())
-  .then(data => console.log(data));
-
-// 或者手动添加X-Requested-With头部
-fetch('https://your-domain.com/httpbin.org/get', {
-  headers: {
-    'X-Requested-With': 'XMLHttpRequest'
-  }
-})
-  .then(response => response.json())
-  .then(data => console.log(data));
-```
-
-### 管理API
-
-需要设置`API_KEY`环境变量才能访问管理API。
-
-**健康检查**
-```bash
-GET /_api/health?key=your-api-key
-```
-
-**查看统计信息**
-```bash
-GET /_api/stats?key=your-api-key
-```
-
-**查看性能数据**
-```bash
-GET /_api/performance?key=your-api-key
-```
-
-**查看配置信息**
-```bash
-GET /_api/config?key=your-api-key
-```
-
-**查看版本信息**
-```bash
-GET /_api/version?key=your-api-key
-```
-
-**重置统计数据**
-```bash
-GET /_api/reset-stats?key=your-api-key
-```
-
-**清理缓存**
-```bash
-GET /_api/clear-cache?key=your-api-key
-```
-
-**热重载配置**
-```bash
-GET /_api/reload-config?key=your-api-key
-```
-
-**使用Bearer Token**
-```bash
-curl -H "Authorization: Bearer your-api-key" \
-  https://your-domain.com/_api/stats
-```
-
-## 安全最佳实践
-
-### 🔐 基础安全配置
-
-1. **强制设置API密钥**
-   - 使用至少32位的复杂随机密钥
-   - 包含大小写字母、数字和特殊字符
-   - 定期轮换API密钥（建议每3-6个月）
-   - 示例生成强密钥：`openssl rand -base64 32`
-
-2. **配置严格的访问控制**
-   - 使用域名白名单限制可代理的目标
-   - 配置IP黑名单阻止恶意来源
-   - 设置来源白名单控制CORS访问
-   - 避免使用通配符（*）除非必要
-
-3. **实施多层限流保护**
-   - 请求频率限制：防止单IP过度请求
-   - 并发连接限制：防止资源耗尽
-   - 请求体大小限制：防止大文件攻击
-   - 根据服务器性能调整参数
-
-### 🛡️ 系统安全加固
-
-4. **服务运行安全**
-   - 使用专用非特权用户运行服务
-   - 启用systemd安全特性（已内置）
-   - 配置适当的文件权限（600用于配置文件）
-   - 定期检查服务运行状态
-
-5. **网络安全配置**
-   - 配置防火墙只开放必要端口
-   - 使用HTTPS反向代理（推荐nginx/Apache）
-   - 考虑使用VPN或内网部署
-   - 监控异常网络连接
-
-6. **日志和监控**
-   - 启用详细日志记录
-   - 配置日志轮转防止磁盘满
-   - 设置异常告警（可用Webhook）
-   - 定期分析访问模式
-
-### 🔄 维护和更新
-
-7. **定期安全维护**
-   - 及时更新系统和Deno运行时
-   - 使用管理脚本检查服务状态
-   - 定期备份配置文件
-   - 运行安全检查脚本
-
-8. **安全检查工具**
-   ```bash
-   # 运行安全配置检查
-   curl -fsSL https://raw.githubusercontent.com/bestZwei/ciao-cors/main/security-check.sh | sudo bash
-
-   # 或下载后运行
-   wget https://raw.githubusercontent.com/bestZwei/ciao-cors/main/security-check.sh
-   chmod +x security-check.sh
-   sudo ./security-check.sh
-   ```
-
-### ⚠️ 安全警告
-
-- **永远不要**在生产环境中禁用所有安全限制
-- **永远不要**使用弱密码或默认密钥
-- **永远不要**允许代理访问内网地址（已内置保护）
-- **永远不要**忽略异常的流量模式
-- **定期检查**是否有未授权的配置更改
-
-## 性能优化
-
-### 推荐配置
-- **小型站点**：并发限制10，频率限制60/分钟
-- **中型站点**：并发限制50，频率限制300/分钟
-- **大型站点**：并发限制100，频率限制1000/分钟
-
-### 优化技巧
-1. **增加缓存时间**
-   - 对于不经常变化的内容，可以延长缓存TTL
-   - 添加自定义缓存控制头
-
-2. **调整并发限制**
-   - 对于强CPU服务器，可以增加并发限制
-   - 监控系统负载，避免过载
-
-3. **使用VPS部署脚本的系统优化功能**
-   - 优化系统限制（文件描述符、连接数）
-   - 调整网络参数提高吞吐量
-   - 添加SWAP空间（低内存服务器）
-
-### 监控指标
-- 平均响应时间（目标：<500ms）
-- 错误率（目标：<1%）
-- 并发连接数
-- 缓存命中率（目标：>70%）
-
-## 故障排除
-
-### 部署脚本问题
-
-**Q: 脚本提示"网络连接失败"**
-```bash
-# 检查网络连接
-ping github.com
-ping deno.land
-
-# 检查DNS设置
-cat /etc/resolv.conf
-
-# 临时使用其他DNS
-echo "nameserver 8.8.8.8" > /etc/resolv.conf
-```
-
-**Q: 健康检查显示"端口未监听"但服务在运行**
-```bash
-# 安装网络工具
-sudo apt install net-tools iproute2 lsof  # Ubuntu/Debian
-sudo yum install net-tools iproute lsof   # CentOS/RHEL
-
-# 手动检查端口
-sudo ss -tuln | grep :3000
-sudo netstat -tuln | grep :3000
-sudo lsof -i :3000
-
-# 检查服务日志
-sudo journalctl -u ciao-cors -f
-```
-
-**Q: 性能监控显示"netstat: command not found"**
-```bash
-# 现代Linux系统推荐使用ss命令
-sudo apt install iproute2  # Ubuntu/Debian
-sudo yum install iproute   # CentOS/RHEL
-
-# 或安装传统的net-tools
-sudo apt install net-tools  # Ubuntu/Debian
-sudo yum install net-tools  # CentOS/RHEL
-```
-
-**Q: Deno安装失败**
-```bash
-# 手动安装Deno
-curl -fsSL https://deno.land/x/install/install.sh | sh
-export PATH="$HOME/.deno/bin:$PATH"
-sudo ln -sf $HOME/.deno/bin/deno /usr/local/bin/deno
-
-# 验证安装
-deno --version
-```
-
-**Q: 防火墙配置失败**
-```bash
-# 检查防火墙状态
-sudo systemctl status firewalld
-sudo systemctl status ufw
-
-# 手动开放端口
-sudo firewall-cmd --permanent --add-port=3000/tcp
-sudo firewall-cmd --reload
-
-# 或使用ufw
-sudo ufw allow 3000/tcp
-```
-
-**Q: 服务创建失败**
-```bash
-# 检查systemd
-sudo systemctl --version
-
-# 手动重载systemd
-sudo systemctl daemon-reload
-
-# 检查服务文件
-sudo systemctl cat ciao-cors
-```
-
-### 服务运行问题
-
-**Q: 服务启动失败，提示端口被占用**
-```bash
-# 检查端口占用
-sudo netstat -tlnp | grep :3000
-sudo lsof -i :3000
-
-# 或使用其他端口
-sudo ./deploy.sh  # 选择修改配置 -> 端口号
-```
-
-**Q: 请求被拒绝，提示Rate limit exceeded**
-```bash
-# 调整限流配置
-export RATE_LIMIT=200
-export RATE_LIMIT_WINDOW=60000
-```
-
-**Q: 代理请求超时**
-```bash
-# 增加超时时间
-export TIMEOUT=60000
-```
-
-**Q: 统计数据不显示**
-```bash
-# 检查统计功能是否启用
-curl http://localhost:3000/_api/config?key=your-api-key
-
-# 启用统计功能
-export ENABLE_STATS=true
-
-# 或修改配置文件
-sudo sed -i 's/^ENABLE_STATS=.*/ENABLE_STATS=true/' /etc/ciao-cors/config.env
-sudo systemctl restart ciao-cors
-
-# 测试统计功能
-curl https://raw.githubusercontent.com/bestZwei/ciao-cors/main/test-stats.sh | bash
-```
-
-**Q: 客户端收到CORS错误**
-```bash
-# 检查允许的来源设置
-export ALLOWED_ORIGINS='["*"]'
-# 或者指定特定域名
-export ALLOWED_ORIGINS='["https://your-app.com"]'
-```
-
-**Q: 收到"Missing required request header"错误**
-```bash
-# 这是新的安全功能，需要添加必需的头部
-# 方法1：在请求中添加X-Requested-With头部
-curl -H "X-Requested-With: XMLHttpRequest" https://your-domain.com/target-url
-
-# 方法2：在请求中添加Origin头部
-curl -H "Origin: https://your-app.com" https://your-domain.com/target-url
-
-# 方法3：如果需要禁用此功能（不推荐）
-export REQUIRE_HEADERS=false
-sudo systemctl restart ciao-cors
-```
-
-### 快速诊断
-
-**使用诊断脚本**
-```bash
-# 下载诊断脚本
-curl -fsSL https://raw.githubusercontent.com/bestZwei/ciao-cors/main/diagnose.sh -o diagnose.sh
-chmod +x diagnose.sh
-
-# 运行诊断
-sudo ./diagnose.sh
-```
-
-诊断脚本会自动检查：
-- 系统状态和资源
-- 服务运行状态
-- 配置文件有效性
-- 网络连接和端口监听
-- 错误日志分析
-- 提供自动修复建议
-
-### 调试技巧
-
-**查看实时日志**
-```bash
-# systemd服务日志
-sudo journalctl -f -u ciao-cors
-
-# 或者直接运行
-deno run --allow-net --allow-env server.ts
-```
-
-**API调试**
-```bash
-# 健康检查
-curl http://localhost:3000/_api/health
-
-# 测试代理
-curl http://localhost:3000/httpbin.org/ip
-
-# 性能数据
-curl -H "Authorization: Bearer your-api-key" \
-  http://localhost:3000/_api/performance
-```
-
-## 技术架构
-
-CIAO-CORS 采用现代化的架构设计，确保高性能和可靠性：
-
-- **运行时环境**：使用Deno运行时，获得原生TypeScript支持和安全沙箱
-- **无依赖设计**：不依赖外部npm包，减少安全风险和部署复杂性
-- **内存优化**：智能缓存管理和资源清理，避免内存泄漏
-- **并发控制**：多级限流策略，确保系统稳定性
-- **安全增强**：全面的请求验证和过滤，防止恶意请求
-
-## 许可证
-
-Anti-Capitalist Software License (v 1.4) - 详见 [LICENSE](LICENSE) 文件
-
-## 贡献指南
-
-欢迎提交Issue和Pull Request！
-
-1. Fork本项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启Pull Request
-
-### 开发环境设置
-
-```bash
-# 安装Deno
-curl -fsSL https://deno.land/x/install/install.sh | sh
-
-# 本地运行
-deno run --allow-net --allow-env server.ts
-
-# 类型检查
-deno check server.ts
-
-# 代码格式化
-deno fmt server.ts
-
-# 代码lint
-deno lint server.ts
-```
-
-## 支持
-
-如果这个项目对你有帮助，请给个⭐️！
-
-### 联系方式
-
-- GitHub Issues: [https://github.com/bestZwei/ciao-cors/issues](https://github.com/bestZwei/ciao-cors/issues)
-- Email: [post@zwei.de.eu.org](mailto:post@zwei.de.eu.org)
+---
+
+## 一、核心特性
+
+- 🚀 **高性能 CORS 代理**：支持路径模式（`/{target-url}`）与查询参数模式（`/?url={target-url}`），支持 GET、POST、PUT、PATCH、DELETE、HEAD、OPTIONS 等全量 HTTP 方法。
+- 📦 **有界 LRU 响应缓存**：同时限制条目数（`MAX_CACHE_ENTRIES`）与内存总字节数（`MAX_CACHE_BYTES`）。基于 Tap Stream 旁路采集，杜绝 `Response.clone()` 内存泄漏；针对 Authorization/Cookie 等敏感凭证自动隔离，尊重 `Cache-Control` 与 `Vary` 规范。
+- 🛡️ **严格 SSRF 纵深防护**：全面防御 IPv4、IPv6、IPv4-mapped IPv6、NAT64、6to4、链路本地、CGNAT 及保留地址；精准阻断云厂商元数据接口（AWS/GCP `169.254.169.254`、Scaleway `169.254.42.42`、阿里云 `100.100.100.200` 等）；DNS 解析坚持 fail-closed 阻断策略。
+- ⚡ **流式传输与并发租约**：请求体支持按 chunk 流式读取与大小截断（防超限 chunked OOM）；基于 Lease 机制绑定响应流生命周期，确保 SSE（Server-Sent Events）等长连接真正结束后释放并发资源，杜绝计数漂移。
+- 🔑 **双轨密钥隔离**：
+  - `API_KEY`：专门保护 `/_api/*` 运维管理路由（脱敏配置、实时统计、缓存清理）。
+  - `PROXY_API_KEY`：专门保护代理数据转发路由。客户端可通过 `X-Proxy-Key` 或 `Proxy-Authorization: Bearer <key>` 鉴权，不污染客户端发向上游的真实 `Authorization` 请求头，对 OPTIONS 预检请求全自动友好放行。
+- 🏷️ **低资源 Profile 预设**：专为 **Scaleway 70mVCPU / 128MB RAM** 等极致资源环境优化（`RESOURCE_PROFILE=low-memory`），空载内存仅 **16.6 MB**，20 并发实测仅 **21.6 MB**。
+- 🐳 **生产级容器化**：官方 Deno 2 镜像、非 root 用户（UID 1993）、内置轻量零外部依赖健康检查（`/health`）、平滑捕获 SIGTERM/SIGINT 优雅退出。
 
 ---
 
-Made with ❤️ by [bestZwei](https://github.com/bestZwei)
+## 二、快速开始
+
+### 1. Docker 快速启动
+
+```bash
+# 1. 极简启动（默认标准规格，监听 3000 端口）
+docker run -d \
+  --name ciao-cors \
+  -p 3000:3000 \
+  ghcr.io/silentely/ciao-cors:1.3.2
+
+# 2. 低内存模式启动（限制 128MB 内存，适合轻量 VPS / 边缘容器）
+docker run -d \
+  --name ciao-cors \
+  --memory=128m \
+  --memory-swap=128m \
+  --cpus=0.07 \
+  -e RESOURCE_PROFILE=low-memory \
+  -e PROXY_API_KEY=your-proxy-key \
+  -p 3000:3000 \
+  ghcr.io/silentely/ciao-cors:1.3.2
+```
+
+### 2. Docker Compose 编排
+
+使用项目内置的 `compose.yaml`：
+
+```yaml
+services:
+  ciao-cors:
+    image: ghcr.io/silentely/ciao-cors:1.3.2
+    container_name: ciao-cors
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - RESOURCE_PROFILE=low-memory # 可选: standard / low-memory
+      - PROXY_API_KEY=your-proxy-key # 可选: 代理使用鉴权
+      - API_KEY=your-admin-key       # 可选: 管理接口鉴权
+      - ENABLE_CACHE=true
+      - REQUIRE_HEADERS=true
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const p=Deno.env.get('PORT')||'3000';const r=await fetch('http://127.0.0.1:'+p+'/health');if(!r.ok)Deno.exit(1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+```
+
+启动命令：
+```bash
+docker compose up -d
+```
+
+### 3. Deno 本地运行
+
+```bash
+# 安装 Deno 2 后直接启动
+deno task start
+
+# 开发监听模式
+deno task dev
+
+# 执行自动化测试
+deno task test
+```
+
+---
+
+## 三、云平台部署与原地替换
+
+### 1. Scaleway Serverless Containers 原地迁移（优先适配）
+
+适用于已有正在运行的 Scaleway Container，希望通过替换镜像实现原地平滑迁移，**保留原有 Container ID、Namespace、自定义域名与 HTTPS SSL 证书**。
+
+- 完整原地替换手册见：[docs/deploy/scaleway.md](docs/deploy/scaleway.md)
+- 控制台关键配置表：
+  - **Image URL**：`ghcr.io/silentely/ciao-cors:1.3.2`（或 `1.3.2-amd64`）
+  - **Port**：`3000`
+  - **CPU / Memory**：`70 mVCPU` / `128 MB`（常驻推荐）或 `140 mVCPU` / `256 MB`
+  - **Min / Max Scale**：`Min=1, Max=1`（常驻无冷启动）或 `Min=0, Max=1`（按需冷启动）
+  - **Health Check Path**：`/health`
+  - **Environment Variables**：`RESOURCE_PROFILE=low-memory`
+- 原地热替换运维脚本：
+  ```bash
+  # 安全预览检查 (Dry-run)
+  ./scripts/scaleway-update.sh --region nl-ams --container-id <YOUR-CONTAINER-ID>
+
+  # 确认执行原地热更新
+  ./scripts/scaleway-update.sh --region nl-ams --container-id <YOUR-CONTAINER-ID> --apply
+  ```
+
+### 2. Fly.io 部署
+
+在项目根目录下生成 `fly.toml`：
+```toml
+app = "your-ciao-cors"
+primary_region = "hkg"
+
+[build]
+  image = "ghcr.io/silentely/ciao-cors:1.3.2"
+
+[env]
+  PORT = "3000"
+  RESOURCE_PROFILE = "low-memory"
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.http_checks]]
+    interval = "30s"
+    method = "get"
+    path = "/health"
+    timeout = "5s"
+```
+运行 `fly deploy` 即可完成部署。
+
+### 3. Northflank 部署
+
+- 创建 **Deployment Service** -> 来源选择 **External Image**。
+- 填写镜像：`ghcr.io/silentely/ciao-cors:1.3.2`。
+- 端口配置：添加 HTTP 端口 `3000`，启用 Public 访问。
+- 健康检查：路径设为 `/health`。
+- 环境变量：设置 `RESOURCE_PROFILE=standard` 或 `low-memory`。
+
+### 4. ClawCloud Run 部署
+
+- 在 App/Container 创建界面输入镜像 `ghcr.io/silentely/ciao-cors:1.3.2`。
+- 容器端口设置为 `3000`。
+- 探针路径设置为 `/health`。
+
+---
+
+## 四、GHCR 镜像地址与发布规范
+
+镜像托管于 GitHub Container Registry：
+`ghcr.io/silentely/ciao-cors`
+
+> [!TIP]
+> **GHCR 公开权限提醒**：
+> GitHub Actions 首次自动发布 Package 后，默认可能处于 Private 状态。
+> 请前往 GitHub 组织/用户主页 -> **Packages** -> 点击 `ciao-cors` -> **Package settings** -> 最下方将其可见性切换为 **Public**，即可实现免密匿名拉取。
+
+### 镜像标签规则
+- `ghcr.io/silentely/ciao-cors:latest`：`main` 分支最新稳定构建（多架构 amd64/arm64）
+- `ghcr.io/silentely/ciao-cors:1.3.2`：语义化正式版本（多架构）
+- `ghcr.io/silentely/ciao-cors:1.3`、`1`：主要版本别名
+- `ghcr.io/silentely/ciao-cors:1.3.2-amd64`：专为 Scaleway 等 x86_64 平台提供的单一架构标签
+- `ghcr.io/silentely/ciao-cors:sha-<commit>`：与 Git Commit 绑定的不可变镜像版本，便于精确审计与回滚
+
+---
+
+## 五、完整环境变量参考
+
+| 环境变量名 | 默认值 | low-memory 预设值 | 说明 |
+|---|---|---|---|
+| `PORT` | `3000` | `3000` | 服务监听端口（支持容器平台自动注入） |
+| `HOST` | `0.0.0.0` | `0.0.0.0` | 绑定监听地址 |
+| `RESOURCE_PROFILE` | `standard` | `low-memory` | 预设模式。设为 `low-memory` 自动将缓存/并发等调整为 128MB 优化值 |
+| `PROXY_API_KEY` | *(未设置)* | *(未设置)* | **代理访问密钥**。配置后客户端必须带 `X-Proxy-Key` 或 `Proxy-Authorization` |
+| `API_KEY` | *(未设置)* | *(未设置)* | **管理 API 密钥**。保护 `/_api/*` 路由 |
+| `ENABLE_CACHE` | `true` | `true` | 是否启用内置 LRU 响应缓存 |
+| `MAX_CACHE_ENTRIES` | `1000` | `32` | LRU 缓存条目上限 |
+| `MAX_CACHE_BYTES` | `33554432` (32MB) | `8388608` (8MB) | 缓存占用的总内存字节上限 |
+| `MAX_CACHE_ENTRY_BYTES` | `2097152` (2MB) | `262144` (256KB) | 单条响应能够进入缓存的最大字节数 |
+| `CACHE_TTL` | `60000` (60s) | `15000` (15s) | 缓存有效时间（毫秒） |
+| `RATE_LIMIT` | `2500` | `500` | 限流窗口内的单 IP 最大请求数 |
+| `RATE_LIMIT_WINDOW` | `60000` (60s) | `60000` (60s) | 限流滑动时间窗口（毫秒） |
+| `CONCURRENT_LIMIT` | `10` | `4` | 单 IP 最大允许的同时在途并发请求数 |
+| `TOTAL_CONCURRENT_LIMIT` | `1000` | `16` | 实例全局最大允许的同时在途并发请求数 |
+| `MAX_BODY_SIZE` | `10485760` (10MB) | `1048576` (1MB) | 请求体大小上限。超过立即中断流并返回 413 |
+| `TIMEOUT` | `30000` (30s) | `30000` (30s) | 上游网络请求超时时间（毫秒） |
+| `STREAM_IDLE_TIMEOUT` | `30000` (30s) | `30000` (30s) | 流式传输单 chunk 空闲超时时间（毫秒） |
+| `ENABLE_STATS` | `true` | `true` | 是否启用实时统计数据收集 |
+| `ENABLE_LOGGING` | `true` | `true` | 是否启用请求日志打印 |
+| `LOG_WEBHOOK` | *(未设置)* | *(未设置)* | 批量异步发送日志的 Webhook 地址 |
+| `REQUIRE_HEADERS` | `true` | `true` | 是否强制要求客户端提供 `Origin` 或 `X-Requested-With` 头部 |
+| `REMOVE_ORIGIN_HEADER` | `false` | `false` | 转发上游请求时是否剥离 Origin 头（防止防盗链拦截） |
+| `ENABLE_KEYWORD_BLOCK` | `true` | `true` | 是否拦截流媒体切片及高频滥用后缀 |
+| `BLOCKED_KEYWORDS` | 默认切片关键字 | 默认切片关键字 | 自定义拦截关键字（JSON 数组或逗号分隔） |
+| `DROP_HEADERS` | *(空)* | *(空)* | 自定义向上游转发时剔除的请求头列表（逗号分隔） |
+| `TRUSTED_PROXIES` | *(空)* | *(空)* | 受信任的代理网段（CIDR 列表）。仅对受信对端解析 X-Forwarded-For |
+| `FORWARD_SET_COOKIE` | `false` | `false` | 是否将目标服务的 `Set-Cookie` 头转发给客户端（默认 false 防污染） |
+| `ENABLE_MANAGEMENT_API` | `true` | `true` | 是否开启 `/_api/*` 管理路由 |
+
+---
+
+## 六、代理使用说明
+
+### 1. 基础请求格式
+
+```bash
+# 路径代理模式
+https://your-proxy.com/{target-url}
+
+# 参数代理模式
+https://your-proxy.com/?url={target-url}
+```
+
+### 2. 携带代理访问密钥 (`PROXY_API_KEY`)
+
+当服务端配置了 `PROXY_API_KEY=my-secret-key` 时：
+
+```bash
+# 推荐方式 1: 使用独立 X-Proxy-Key 请求头
+curl -H "X-Proxy-Key: my-secret-key" \
+     -H "Origin: https://my-frontend.com" \
+     https://your-proxy.com/api.github.com/zen
+
+# 推荐方式 2: 使用 Proxy-Authorization 请求头
+curl -H "Proxy-Authorization: Bearer my-secret-key" \
+     -H "Origin: https://my-frontend.com" \
+     https://your-proxy.com/api.github.com/zen
+```
+
+> **注意**：`X-Proxy-Key` 会在转发前由代理服务彻底剥离，**绝不会传递给目标上游服务器**。客户端传给目标上游的业务 `Authorization` 头仍会完整、原样透传给目标服务器！
+
+---
+
+## 七、管理 API 与监控
+
+设置 `API_KEY` 环境变量即可启用带鉴权保护的管理接口：
+
+```bash
+# 查看健康状态（包含系统内存 RSS 占用与 Profile）
+GET /_api/health?key=your-admin-key
+
+# 查看统计与 LRU 缓存指标（条目数与字节占用）
+GET /_api/stats?key=your-admin-key
+
+# 查看性能分析指标（每分钟请求数、平均耗时）
+GET /_api/performance?key=your-admin-key
+
+# 查看当前运行脱敏配置
+GET /_api/config?key=your-admin-key
+
+# 运行中热重载配置（重新加载环境变量）
+GET /_api/reload-config?key=your-admin-key
+
+# 清理内存响应缓存
+GET /_api/clear-cache?key=your-admin-key
+```
+
+---
+
+## 八、资源消耗实测与平台风险提示
+
+### 实测资源基准（Docker Container 实测数据）
+
+| 测试场景 | 规格限制 | 空闲 RSS | 20 并发请求活跃 RSS | 平均响应耗时 | 稳定性 / OOM 判定 |
+|---|---|---|---|---|---|
+| **极低规格 (low-memory)** | `--cpus=0.07 --memory=128m` | **16.63 MiB** | **21.60 MiB** | ~71ms | **稳定运行，0 次 OOM，内存利用率仅 16.8%** |
+| **标准规格 (standard)** | `--cpus=0.25 --memory=256m` | **22.10 MiB** | **31.59 MiB** | ~63ms | **稳定运行，高富余** |
+
+### 免费平台风险与计费须知
+- **Scaleway 共享免费池**：Scaleway 账号每月提供 400,000 GB-s 与 200,000 vCPU-s 免费额度。单实例 70mVCPU/128MB 持续运行一个月消耗约 81% 内存额度与 90.7% CPU 额度。
+- **并发与滚动发布注意**：在触发容器更新部署或账号内存在其他 Serverless 函数时，可能产生额外开销。**请结合个人用量监控账单，任何平台均不能保证绝对零费用**。
+
+---
+
+## 九、开源许可证
+
+本项目采用 [Anti-Capitalist Software License](LICENSE)。

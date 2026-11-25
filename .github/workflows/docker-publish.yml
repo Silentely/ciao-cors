@@ -1,0 +1,155 @@
+name: Build & Publish Container
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-verify:
+    name: Test & Verify Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify Version Consistency
+        id: verify-version
+        run: |
+          DENO_VER=$(jq -r '.version' deno.json)
+          SERVER_VER=$(grep -o "const VERSION = '[0-9]\+\.[0-9]\+\.[0-9]\+'" server.ts | head -1 | sed "s/const VERSION = '//;s/'//")
+          echo "deno.json version: $DENO_VER"
+          echo "server.ts VERSION: $SERVER_VER"
+          if [ "$DENO_VER" != "$SERVER_VER" ]; then
+            echo "::error::Version mismatch: deno.json ($DENO_VER) != server.ts ($SERVER_VER)"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG_VER="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VER" != "$DENO_VER" ]; then
+              echo "::error::Tag mismatch: $GITHUB_REF_NAME does not match version $DENO_VER"
+              exit 1
+            fi
+          fi
+          echo "version=$DENO_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Type Check
+        run: deno task check
+
+      - name: Lint Code
+        run: deno task lint
+
+      - name: Run Unit & Integration Tests
+        run: deno task test
+
+  build-and-publish:
+    name: Build & Publish GHCR Images
+    runs-on: ubuntu-latest
+    needs: test-and-verify
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Metadata & Normalized Repo
+        id: repo-meta
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          VERSION=$(jq -r '.version' deno.json)
+          echo "image=ghcr.io/$REPO_LOWER" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (multi-arch)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.repo-meta.outputs.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.repo-meta.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Docker metadata (dedicated amd64 tag for Scaleway)
+        id: meta-amd64
+        if: github.event_name != 'pull_request'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.repo-meta.outputs.image }}
+          tags: |
+            type=raw,value=amd64,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.repo-meta.outputs.version }}-amd64,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=sha-${{ github.sha }}-amd64
+
+      - name: Build and push dedicated amd64 image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-amd64.outputs.tags }}
+          labels: ${{ steps.meta-amd64.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.repo-meta.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+          cache-from: type=gha
+          provenance: false

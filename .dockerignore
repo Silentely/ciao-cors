@@ -1,0 +1,10 @@
+.git
+.github
+.mimosa
+*.log
+*.backup
+*.sh
+server_test.ts
+skills
+docs
+brain

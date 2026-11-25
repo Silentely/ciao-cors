@@ -50,12 +50,13 @@ CONCURRENT_LIMIT=20
 TOTAL_CONCURRENT_LIMIT=500
 ENABLE_STATS=true
 ENABLE_LOGGING=true
-TIMEOUT=10000
+TIMEOUT=3000
 MAX_URL_LENGTH=2048
 MAX_BODY_SIZE=1048576
 BLOCKED_IPS=192.168.1.100,10.0.0.1
-ALLOWED_DOMAINS=httpbin.org,jsonplaceholder.typicode.com
+ALLOWED_DOMAINS=httpbin.org,jsonplaceholder.typicode.com,invalid-domain-12345.com
 BLOCKED_DOMAINS=malicious.com,spam.net
+REQUIRE_HEADERS=false
 EOF
 }
 
@@ -268,7 +269,7 @@ test_error_handling() {
     fi
     
     # 测试超时处理
-    local timeout_response=$(curl -s -w "%{http_code}" -o /dev/null "http://localhost:$TEST_PORT/httpbin.org/delay/15")
+    local timeout_response=$(curl -s -w "%{http_code}" -o /dev/null "http://localhost:$TEST_PORT/httpbin.org/delay/5")
     if [[ "$timeout_response" == "504" ]] || [[ "$timeout_response" == "500" ]]; then
         print_status "pass" "超时错误处理正常"
     else
